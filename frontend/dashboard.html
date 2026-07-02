@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ChargeHub - لوحة التحكم</title>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container nav-content">
+            <a href="dashboard.html" class="logo"><span class="logo-icon">⚡</span><span class="logo-text">ChargeHub</span></a>
+            <div style="display:flex;align-items:center;gap:12px;">
+                <span class="user-balance" id="user-balance">0 ج.م</span>
+                <span style="color:var(--text-secondary);font-weight:600;" id="user-name"></span>
+                <button class="btn btn-outline btn-sm" onclick="logout()">خروج</button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Tab Navigation -->
+    <div class="container" style="padding-top:90px;">
+        <div style="display:flex;gap:12px;margin-bottom:30px;flex-wrap:wrap;">
+            <button class="btn btn-primary" onclick="showTab('recharge')" id="tab-recharge">شحن رصيد</button>
+            <button class="btn btn-outline" onclick="showTab('cards')" id="tab-cards">كروت فكة</button>
+            <button class="btn btn-outline" onclick="showTab('history')" id="tab-history">سجل العمليات</button>
+            <button class="btn btn-outline" onclick="showTab('profile')" id="tab-profile">حسابي</button>
+        </div>
+    </div>
+
+    <!-- Recharge Tab -->
+    <section class="container" id="sec-recharge">
+        <div class="card" style="max-width:700px;">
+            <h2 style="margin-bottom:20px;">شحن رصيد</h2>
+            <div class="form-group">
+                <label>اختر الشبكة</label>
+                <div class="operator-grid">
+                    <div class="operator-card" data-op="vodafone" onclick="selOp(this)"><div class="op-icon vodafone-bg">V</div><span>فودافون</span></div>
+                    <div class="operator-card" data-op="etisalat" onclick="selOp(this)"><div class="op-icon etisalat-bg">E</div><span>اتصالات</span></div>
+                    <div class="operator-card" data-op="orange" onclick="selOp(this)"><div class="op-icon orange-bg">O</div><span>اورنج</span></div>
+                    <div class="operator-card" data-op="we" onclick="selOp(this)"><div class="op-icon we-bg">W</div><span>وي</span></div>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>رقم الهاتف</label>
+                <input type="tel" id="phone" placeholder="01XXXXXXXXX" maxlength="11" dir="ltr">
+            </div>
+            <div class="form-group">
+                <label>المبلغ</label>
+                <div class="amount-grid">
+                    <div class="amount-card" data-amt="5" onclick="selAmt(this)">5 ج.م</div>
+                    <div class="amount-card" data-amt="10" onclick="selAmt(this)">10 ج.م</div>
+                    <div class="amount-card" data-amt="25" onclick="selAmt(this)">25 ج.م</div>
+                    <div class="amount-card" data-amt="50" onclick="selAmt(this)">50 ج.م</div>
+                    <div class="amount-card" data-amt="100" onclick="selAmt(this)">100 ج.م</div>
+                    <div class="amount-card" data-amt="200" onclick="selAmt(this)">200 ج.م</div>
+                </div>
+            </div>
+            <button class="btn btn-primary btn-block" onclick="doRecharge()">اشحن الآن</button>
+            <div id="recharge-msg" style="margin-top:12px;text-align:center;font-weight:700;display:none;"></div>
+        </div>
+    </section>
+
+    <!-- Cards Tab -->
+    <section class="container" id="sec-cards" style="display:none;">
+        <h2 style="margin-bottom:20px;">كروت فكة</h2>
+        <div class="cards-grid" id="cards-grid"></div>
+    </section>
+
+    <!-- History Tab -->
+    <section class="container" id="sec-history" style="display:none;">
+        <h2 style="margin-bottom:20px;">سجل العمليات</h2>
+        <div class="card" id="history-list"><p class="empty-state">جاري التحميل...</p></div>
+    </section>
+
+    <!-- Profile Tab -->
+    <section class="container" id="sec-profile" style="display:none;">
+        <div class="card" style="max-width:500px;">
+            <h2 style="margin-bottom:20px;">حسابي</h2>
+            <div style="margin-bottom:16px;"><strong>الاسم:</strong> <span id="p-name"></span></div>
+            <div style="margin-bottom:16px;"><strong>الإيميل:</strong> <span id="p-email"></span></div>
+            <div style="margin-bottom:16px;"><strong>الرصيد:</strong> <span id="p-balance"></span> ج.م</div>
+            <div style="margin-bottom:16px;"><strong>تاريخ التسجيل:</strong> <span id="p-date"></span></div>
+        </div>
+    </section>
+
+    <!-- Toast -->
+    <div class="toast" id="toast"></div>
+
+    <script>
+        const API = '/api';
+        let token = localStorage.getItem('token');
+        let user = JSON.parse(localStorage.getItem('user') || '{}');
+        let selOperator = null, selAmount = null;
+
+        if (!token) { window.location.href = 'login.html'; }
+        else { initDashboard(); }
+
+        function initDashboard() {
+            fetchProfile();
+            loadCards();
+        }
+
+        async function fetchProfile() {
+            try {
+                const res = await fetch(`${API}/auth/profile`, {headers:{'Authorization':`Bearer ${token}`}});
+                const data = await res.json();
+                if (data.success) {
+                    user = data.data;
+                    localStorage.setItem('user', JSON.stringify(user));
+                    updateUI();
+                } else { logout(); }
+            } catch(e) { /* silent */ }
+        }
+
+        function updateUI() {
+            document.getElementById('user-balance').textContent = `${user.balance?.toFixed(2) || 0} ج.م`;
+            document.getElementById('user-name').textContent = user.username || '';
+            document.getElementById('p-name').textContent = user.username || '';
+            document.getElementById('p-email').textContent = user.email || '';
+            document.getElementById('p-balance').textContent = user.balance?.toFixed(2) || '0';
+            document.getElementById('p-date').textContent = user.created_at ? new Date(user.created_at).toLocaleDateString('ar-EG') : '';
+        }
+
+        function logout() { localStorage.clear(); window.location.href = 'login.html'; }
+
+        function showTab(tab) {
+            ['recharge','cards','history','profile'].forEach(t => {
+                document.getElementById('sec-'+t).style.display = t===tab?'block':'none';
+                document.getElementById('tab-'+t).className = t===tab?'btn btn-primary':'btn btn-outline';
+            });
+            if (tab==='history') loadHistory();
+            if (tab==='cards') loadCards();
+        }
+
+        function selOp(el) {
+            document.querySelectorAll('.operator-card').forEach(c=>c.classList.remove('selected'));
+            el.classList.add('selected'); selOperator = el.dataset.op;
+        }
+        function selAmt(el) {
+            document.querySelectorAll('.amount-card').forEach(c=>c.classList.remove('selected'));
+            el.classList.add('selected'); selAmount = parseFloat(el.dataset.amt);
+        }
+
+        async function doRecharge() {
+            const phone = document.getElementById('phone').value.trim();
+            if(!selOperator){toast('اختر الشبكة','error');return;}
+            if(!phone||phone.length!==11){toast('أدخل رقم صحيح (11 رقم)','error');return;}
+            if(!selAmount){toast('اختر المبلغ','error');return;}
+            try {
+                const res = await fetch(`${API}/recharge`, {method:'POST', headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`}, body:JSON.stringify({phone_number:phone,operator:selOperator,amount:selAmount})});
+                const data = await res.json();
+                if(data.success){toast('تم الشحن بنجاح! ✅','success'); fetchProfile(); document.getElementById('phone').value='';} 
+                else {toast(data.error,'error');}
+            } catch(e){toast('خطأ في الاتصال','error');}
+        }
+
+        async function loadCards() {
+            try {
+                const res = await fetch(`${API}/cards/available`);
+                const data = await res.json();
+                if(data.success) {
+                    const names={vodafone:'فودافون',etisalat:'اتصالات',orange:'اورنج',we:'وي'};
+                    document.getElementById('cards-grid').innerHTML = data.data.map(c=>`
+                        <div class="card-item">
+                            <div class="card-item-header"><span class="card-item-operator">${names[c.operator]||c.operator}</span><span class="card-item-badge">متاح</span></div>
+                            <div class="card-item-amount">${c.denomination} ج.م</div>
+                            <div class="card-item-count">${c.available_count} كارت</div>
+                            <button class="btn btn-primary" style="width:100%" onclick="buyCard('${c.operator}',${c.denomination})">شراء</button>
+                        </div>`).join('') || '<p class="empty-state">لا توجد كروت</p>';
+                }
+            } catch(e){}
+        }
+
+        async function buyCard(op,denom) {
+            if(!confirm(`شراء كارت ${op} بقيمة ${denom} ج.م؟`)) return;
+            try {
+                const res = await fetch(`${API}/cards/purchase`, {method:'POST', headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`}, body:JSON.stringify({operator:op,denomination:denom})});
+                const data = await res.json();
+                if(data.success){
+                    const c=data.data.card;
+                    alert(`✅ تم الشراء!\n\nالرقم التسلسلي: ${c.serial_number}\nPIN: ${c.pin}`);
+                    toast('تم شراء الكارت','success'); fetchProfile(); loadCards();
+                } else {toast(data.error,'error');}
+            } catch(e){toast('خطأ','error');}
+        }
+
+        async function loadHistory() {
+            try {
+                const res = await fetch(`${API}/transactions`, {headers:{'Authorization':`Bearer ${token}`}});
+                const data = await res.json();
+                if(data.success) {
+                    const types={recharge:'📱 شحن',card_purchase:'💳 كارت',deposit:'💰 إيداع'};
+                    const ops={vodafone:'فودافون',etisalat:'اتصالات',orange:'اورنج',we:'وي',admin:'النظام'};
+                    const list = data.data.transactions;
+                    document.getElementById('history-list').innerHTML = list.length ? list.map(t=>`
+                        <div class="transaction-item">
+                            <div class="transaction-info">
+                                <div class="transaction-icon ${t.type}">${types[t.type]?.split(' ')[0]||'📋'}</div>
+                                <div class="transaction-details"><h4>${types[t.type]||t.type} - ${ops[t.operator]||t.operator||''}</h4><p>${t.phone_number||'كارت فكة'} • ${new Date(t.created_at).toLocaleDateString('ar-EG')}</p></div>
+                            </div>
+                            <div class="transaction-amount">${t.type==='deposit'?'+':'-'}${t.amount} ج.م</div>
+                        </div>`).join('') : '<p class="empty-state">لا توجد عمليات بعد</p>';
+                }
+            } catch(e){}
+        }
+
+        function toast(msg,type='success') {
+            const t=document.getElementById('toast');
+            t.textContent=msg; t.className=`toast ${type} show`;
+            setTimeout(()=>t.classList.remove('show'),3000);
+        }
+    </script>
+</body>
+</html>

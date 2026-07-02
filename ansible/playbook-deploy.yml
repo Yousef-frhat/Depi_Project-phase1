@@ -1,0 +1,136 @@
+---
+# ChargeHub Deployment Playbook
+# Deploys the full stack to a production server
+
+- name: Deploy ChargeHub Platform
+  hosts: all
+  become: true
+  vars:
+    app_dir: /opt/chargehub
+    compose_file: "{{ app_dir }}/docker-compose.yml"
+
+  tasks:
+    # ============================================================
+    # PREREQUISITES
+    # ============================================================
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install required packages
+      apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gnupg
+          - lsb-release
+          - python3-pip
+          - git
+        state: present
+
+    # ============================================================
+    # DOCKER INSTALLATION
+    # ============================================================
+    - name: Add Docker GPG key
+      apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+
+    - name: Add Docker repository
+      apt_repository:
+        repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+        state: present
+
+    - name: Install Docker Engine
+      apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-compose-plugin
+        state: present
+
+    - name: Start and enable Docker
+      systemd:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Add user to docker group
+      user:
+        name: "{{ ansible_user }}"
+        groups: docker
+        append: yes
+
+    # ============================================================
+    # APPLICATION DEPLOYMENT
+    # ============================================================
+    - name: Create application directory
+      file:
+        path: "{{ app_dir }}"
+        state: directory
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: '0755'
+
+    - name: Copy project files
+      synchronize:
+        src: ../
+        dest: "{{ app_dir }}/"
+        rsync_opts:
+          - "--exclude=.git"
+          - "--exclude=ansible"
+          - "--exclude=__pycache__"
+
+    - name: Build and start services
+      community.docker.docker_compose_v2:
+        project_src: "{{ app_dir }}"
+        build: always
+        state: present
+      register: deploy_result
+
+    - name: Wait for backend to be healthy
+      uri:
+        url: "http://localhost:5000/api/health"
+        status_code: 200
+      register: health_check
+      retries: 10
+      delay: 5
+      until: health_check.status == 200
+
+    - name: Display deployment status
+      debug:
+        msg: |
+          ✅ ChargeHub deployed successfully!
+          Frontend: http://{{ ansible_host }}:8080
+          Backend API: http://{{ ansible_host }}:5000
+          Grafana: http://{{ ansible_host }}:3000
+          Prometheus: http://{{ ansible_host }}:9090
+
+    # ============================================================
+    # FIREWALL CONFIGURATION
+    # ============================================================
+    - name: Configure UFW - allow SSH
+      ufw:
+        rule: allow
+        port: '22'
+        proto: tcp
+
+    - name: Configure UFW - allow HTTP
+      ufw:
+        rule: allow
+        port: '8080'
+        proto: tcp
+
+    - name: Configure UFW - allow Grafana
+      ufw:
+        rule: allow
+        port: '3000'
+        proto: tcp
+
+    - name: Enable UFW
+      ufw:
+        state: enabled
+        policy: deny

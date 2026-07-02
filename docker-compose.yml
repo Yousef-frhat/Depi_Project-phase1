@@ -1,0 +1,141 @@
+services:
+  # ============================================================
+  # DATABASE
+  # ============================================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: chargehub-db
+    environment:
+      POSTGRES_USER: chargehub
+      POSTGRES_PASSWORD: chargehub
+      POSTGRES_DB: chargehub
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U chargehub"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - chargehub-net
+
+  # ============================================================
+  # BACKEND API (Microservices)
+  # ============================================================
+  backend:
+    build: ./backend
+    container_name: chargehub-backend
+    environment:
+      DATABASE_URL: postgresql://chargehub:chargehub@postgres:5432/chargehub
+      JWT_SECRET_KEY: chargehub-production-secret-key-2024
+      FLASK_DEBUG: "false"
+      CORS_ORIGINS: "*"
+    ports:
+      - "5000:5000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - chargehub-net
+
+  # ============================================================
+  # DB INITIALIZER (one-shot)
+  # ============================================================
+  db-init:
+    build: ./backend
+    container_name: chargehub-db-init
+    command: python init_db.py
+    environment:
+      DATABASE_URL: postgresql://chargehub:chargehub@postgres:5432/chargehub
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    networks:
+      - chargehub-net
+
+  # ============================================================
+  # FRONTEND (Nginx)
+  # ============================================================
+  frontend:
+    build: ./frontend
+    container_name: chargehub-frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - chargehub-net
+
+  # ============================================================
+  # MONITORING - Prometheus
+  # ============================================================
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: chargehub-prometheus
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.retention.time=7d'
+    restart: unless-stopped
+    networks:
+      - chargehub-net
+
+  # ============================================================
+  # MONITORING - Grafana
+  # ============================================================
+  grafana:
+    image: grafana/grafana:latest
+    container_name: chargehub-grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: chargehub123
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+    networks:
+      - chargehub-net
+
+  # ============================================================
+  # LOGGING - Loki
+  # ============================================================
+  loki:
+    image: grafana/loki:latest
+    container_name: chargehub-loki
+    ports:
+      - "3100:3100"
+    volumes:
+      - loki_data:/loki
+    restart: unless-stopped
+    networks:
+      - chargehub-net
+
+volumes:
+  postgres_data:
+  prometheus_data:
+  grafana_data:
+  loki_data:
+
+networks:
+  chargehub-net:
+    driver: bridge

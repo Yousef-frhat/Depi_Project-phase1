@@ -1,0 +1,84 @@
+---
+# ChargeHub Monitoring Setup Playbook
+# Configures Prometheus alerts and Grafana dashboards
+
+- name: Setup Monitoring & Alerting
+  hosts: all
+  become: true
+  vars:
+    app_dir: /opt/chargehub
+
+  tasks:
+    - name: Create monitoring directories
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - "{{ app_dir }}/monitoring"
+        - "{{ app_dir }}/monitoring/grafana/dashboards"
+        - "{{ app_dir }}/monitoring/grafana/datasources"
+        - "{{ app_dir }}/monitoring/alerts"
+
+    - name: Deploy Prometheus alert rules
+      copy:
+        dest: "{{ app_dir }}/monitoring/alerts/rules.yml"
+        content: |
+          groups:
+            - name: chargehub_alerts
+              rules:
+                - alert: HighErrorRate
+                  expr: rate(http_requests_total{status=~"5.."}[5m]) > 0.1
+                  for: 5m
+                  labels:
+                    severity: critical
+                  annotations:
+                    summary: "High error rate detected"
+                    description: "More than 10% of requests are failing"
+
+                - alert: ServiceDown
+                  expr: up == 0
+                  for: 1m
+                  labels:
+                    severity: critical
+                  annotations:
+                    summary: "Service {{ $labels.job }} is down"
+
+                - alert: HighResponseTime
+                  expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 2
+                  for: 5m
+                  labels:
+                    severity: warning
+                  annotations:
+                    summary: "High response time detected (p95 > 2s)"
+
+    - name: Restart monitoring stack
+      community.docker.docker_compose_v2:
+        project_src: "{{ app_dir }}"
+        services:
+          - prometheus
+          - grafana
+          - loki
+        state: restarted
+
+    - name: Verify Prometheus is running
+      uri:
+        url: "http://localhost:9090/-/healthy"
+        status_code: 200
+      retries: 5
+      delay: 3
+
+    - name: Verify Grafana is running
+      uri:
+        url: "http://localhost:3000/api/health"
+        status_code: 200
+      retries: 5
+      delay: 3
+
+    - name: Display monitoring URLs
+      debug:
+        msg: |
+          📊 Monitoring stack is ready!
+          Prometheus: http://{{ ansible_host }}:9090
+          Grafana: http://{{ ansible_host }}:3000 (admin/chargehub123)
+          Loki: http://{{ ansible_host }}:3100

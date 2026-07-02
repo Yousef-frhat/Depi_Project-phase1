@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ChargeHub - Admin Panel</title>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        .admin-container{max-width:1200px;margin:90px auto 40px;padding:0 20px}
+        .stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:30px}
+        .stat-card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:24px;text-align:center}
+        .stat-card h3{font-size:2rem;margin-bottom:4px;background:linear-gradient(135deg,var(--primary),var(--secondary));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+        .stat-card p{color:var(--text-secondary);font-size:0.85rem}
+        .admin-section{margin-bottom:30px}
+        .admin-section h2{margin-bottom:16px;font-size:1.2rem}
+        .admin-table{width:100%;border-collapse:collapse;background:var(--bg-card);border-radius:var(--radius);overflow:hidden;font-size:0.85rem}
+        .admin-table th,.admin-table td{padding:10px 14px;text-align:right;border-bottom:1px solid var(--border)}
+        .admin-table th{background:var(--bg-secondary);font-weight:700;color:var(--text-secondary)}
+        .add-form{display:flex;gap:10px;align-items:end;flex-wrap:wrap;background:var(--bg-card);padding:16px;border-radius:var(--radius);border:1px solid var(--border);margin-bottom:20px}
+        .add-form input{padding:10px;background:var(--bg-secondary);border:2px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-family:'Cairo',sans-serif;width:120px}
+        .add-form input:focus{outline:none;border-color:var(--primary)}
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container nav-content">
+            <div class="logo"><span class="logo-icon">⚡</span><span class="logo-text">Admin Panel</span></div>
+            <div style="display:flex;gap:10px;">
+                <a href="dashboard.html" class="btn btn-outline btn-sm">← الداشبورد</a>
+                <button class="btn btn-outline btn-sm" onclick="localStorage.clear();location.href='login.html'">خروج</button>
+            </div>
+        </div>
+    </nav>
+    <div class="admin-container" id="admin-content">
+        <h1 style="margin-bottom:20px">لوحة تحكم الأدمن</h1>
+        <div class="stats-grid">
+            <div class="stat-card"><h3 id="s-users">-</h3><p>المستخدمين</p></div>
+            <div class="stat-card"><h3 id="s-transactions">-</h3><p>العمليات</p></div>
+            <div class="stat-card"><h3 id="s-revenue">-</h3><p>الإيرادات</p></div>
+            <div class="stat-card"><h3 id="s-cards-sold">-</h3><p>كروت مباعة</p></div>
+            <div class="stat-card"><h3 id="s-cards-available">-</h3><p>كروت متاحة</p></div>
+        </div>
+        <div class="admin-section">
+            <h2>إضافة رصيد</h2>
+            <div class="add-form">
+                <div class="form-group" style="margin:0"><label style="font-size:0.8rem">User ID</label><input type="number" id="bal-uid" min="1"></div>
+                <div class="form-group" style="margin:0"><label style="font-size:0.8rem">المبلغ</label><input type="number" id="bal-amt" min="1"></div>
+                <button class="btn btn-primary btn-sm" onclick="addBal()">إضافة</button>
+            </div>
+        </div>
+        <div class="admin-section">
+            <h2>المستخدمين</h2>
+            <table class="admin-table"><thead><tr><th>ID</th><th>الاسم</th><th>الإيميل</th><th>الرصيد</th></tr></thead><tbody id="tb-users"></tbody></table>
+        </div>
+        <div class="admin-section">
+            <h2>آخر العمليات</h2>
+            <table class="admin-table"><thead><tr><th>المستخدم</th><th>النوع</th><th>الشبكة</th><th>المبلغ</th><th>التاريخ</th></tr></thead><tbody id="tb-tx"></tbody></table>
+        </div>
+    </div>
+    <script>
+        const API='/api';
+        const u=JSON.parse(localStorage.getItem('user')||'{}');
+        if(!localStorage.getItem('token')||u.email!=='admin@chargehub.com'){
+            document.getElementById('admin-content').innerHTML='<div class="card" style="text-align:center;padding:60px"><h2>⛔ غير مصرح</h2><p style="color:var(--text-secondary);margin:12px 0">سجل بحساب الأدمن (admin@chargehub.com)</p><a href="login.html" class="btn btn-primary">تسجيل الدخول</a></div>';
+        } else { load(); }
+
+        async function load(){
+            const res=await fetch(`${API}/admin/stats`);
+            const d=await res.json();
+            if(!d.success)return;
+            const s=d.data.stats;
+            document.getElementById('s-users').textContent=s.total_users;
+            document.getElementById('s-transactions').textContent=s.total_transactions;
+            document.getElementById('s-revenue').textContent=s.total_revenue.toFixed(0)+' ج.م';
+            document.getElementById('s-cards-sold').textContent=s.cards_sold;
+            document.getElementById('s-cards-available').textContent=s.cards_available;
+            document.getElementById('tb-users').innerHTML=d.data.users.map(u=>`<tr><td>${u.id}</td><td>${u.username}</td><td>${u.email}</td><td>${u.balance.toFixed(0)} ج.م</td></tr>`).join('');
+            const tl={recharge:'شحن',card_purchase:'كارت',deposit:'إيداع'};
+            document.getElementById('tb-tx').innerHTML=d.data.recent_transactions.map(t=>`<tr><td>${t.username}</td><td>${tl[t.type]||t.type}</td><td>${t.operator||'-'}</td><td>${t.amount} ج.م</td><td>${new Date(t.created_at).toLocaleDateString('ar-EG')}</td></tr>`).join('');
+        }
+
+        async function addBal(){
+            const uid=document.getElementById('bal-uid').value,amt=document.getElementById('bal-amt').value;
+            if(!uid||!amt){alert('أدخل البيانات');return;}
+            const res=await fetch(`${API}/admin/add-balance`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user_id:+uid,amount:+amt})});
+            const d=await res.json();
+            alert(d.success?d.message:d.error);
+            if(d.success)load();
+        }
+    </script>
+</body>
+</html>

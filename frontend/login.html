@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ChargeHub - تسجيل الدخول</title>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container nav-content">
+            <a href="/" class="logo"><span class="logo-icon">⚡</span><span class="logo-text">ChargeHub</span></a>
+            <div></div>
+        </div>
+    </nav>
+
+    <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:80px 20px 40px;">
+        <div class="card" style="width:100%;max-width:420px;">
+            <!-- Login Form -->
+            <div id="login-form">
+                <h2 style="text-align:center;margin-bottom:24px;font-size:1.5rem;">تسجيل الدخول</h2>
+                <div class="form-group">
+                    <label>البريد الإلكتروني</label>
+                    <input type="email" id="login-email" placeholder="example@email.com" dir="ltr">
+                </div>
+                <div class="form-group">
+                    <label>كلمة المرور</label>
+                    <input type="password" id="login-password" placeholder="••••••••">
+                </div>
+                <div id="login-error" style="color:var(--error);font-size:0.85rem;margin-bottom:12px;display:none;"></div>
+                <button class="btn btn-primary btn-block" onclick="doLogin()">دخول</button>
+                <p style="text-align:center;margin-top:16px;color:var(--text-secondary);font-size:0.9rem;">
+                    ليس لديك حساب؟ <a style="color:var(--primary);cursor:pointer;font-weight:700;" onclick="toggleForm()">سجل الآن</a>
+                </p>
+            </div>
+
+            <!-- Register Form -->
+            <div id="register-form" style="display:none;">
+                <h2 style="text-align:center;margin-bottom:24px;font-size:1.5rem;">حساب جديد</h2>
+                <div class="form-group">
+                    <label>اسم المستخدم</label>
+                    <input type="text" id="reg-username" placeholder="اسم المستخدم">
+                </div>
+                <div class="form-group">
+                    <label>البريد الإلكتروني</label>
+                    <input type="email" id="reg-email" placeholder="example@email.com" dir="ltr">
+                </div>
+                <div class="form-group">
+                    <label>كلمة المرور</label>
+                    <input type="password" id="reg-password" placeholder="6 أحرف على الأقل">
+                </div>
+                <div id="reg-error" style="color:var(--error);font-size:0.85rem;margin-bottom:12px;display:none;"></div>
+                <button class="btn btn-primary btn-block" onclick="doRegister()">إنشاء حساب</button>
+                <p style="text-align:center;margin-top:16px;color:var(--text-secondary);font-size:0.9rem;">
+                    لديك حساب بالفعل؟ <a style="color:var(--primary);cursor:pointer;font-weight:700;" onclick="toggleForm()">سجل دخول</a>
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API = '/api';
+        if (localStorage.getItem('token')) { window.location.href = 'dashboard.html'; }
+
+        function toggleForm() {
+            const l = document.getElementById('login-form');
+            const r = document.getElementById('register-form');
+            l.style.display = l.style.display === 'none' ? 'block' : 'none';
+            r.style.display = r.style.display === 'none' ? 'block' : 'none';
+        }
+
+        function showError(id, msg) {
+            const el = document.getElementById(id);
+            el.textContent = msg; el.style.display = 'block';
+        }
+
+        async function doLogin() {
+            const email = document.getElementById('login-email').value.trim();
+            const password = document.getElementById('login-password').value;
+            if (!email || !password) { showError('login-error', 'أدخل الإيميل وكلمة المرور'); return; }
+            try {
+                const res = await fetch(`${API}/auth/login`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({email, password}) });
+                const data = await res.json();
+                if (data.success) {
+                    localStorage.setItem('token', data.data.access_token);
+                    localStorage.setItem('user', JSON.stringify(data.data.user));
+                    window.location.href = 'dashboard.html';
+                } else { showError('login-error', data.error); }
+            } catch(e) { showError('login-error', 'خطأ في الاتصال بالسيرفر'); }
+        }
+
+        async function doRegister() {
+            const username = document.getElementById('reg-username').value.trim();
+            const email = document.getElementById('reg-email').value.trim();
+            const password = document.getElementById('reg-password').value;
+            if (!username || !email || !password) { showError('reg-error', 'أكمل جميع الحقول'); return; }
+            try {
+                const res = await fetch(`${API}/auth/register`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({username, email, password}) });
+                const data = await res.json();
+                if (data.success) {
+                    localStorage.setItem('token', data.data.access_token);
+                    localStorage.setItem('user', JSON.stringify(data.data.user));
+                    window.location.href = 'dashboard.html';
+                } else { showError('reg-error', data.error); }
+            } catch(e) { showError('reg-error', 'خطأ في الاتصال بالسيرفر'); }
+        }
+
+        // Enter key support
+        document.addEventListener('keypress', e => { if(e.key==='Enter') { document.getElementById('login-form').style.display!=='none' ? doLogin() : doRegister(); } });
+    </script>
+</body>
+</html>
