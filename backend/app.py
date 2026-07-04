@@ -6,7 +6,6 @@ Main Flask application with microservices architecture.
 import os
 import logging
 from datetime import datetime, timezone
-from functools import wraps
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS
@@ -122,6 +121,7 @@ def query_db(sql, params=None, fetchone=False, commit=False):
 # ---------------------------------------------------------------------------
 # Supported Operators
 # ---------------------------------------------------------------------------
+
 
 OPERATORS = [
     {"id": "vodafone", "name": "Vodafone", "prefix": ["010"]},
@@ -534,7 +534,10 @@ def purchase_card():
 
                 if not card:
                     conn.rollback()
-                    return jsonify({"success": False, "error": "No cards available for this operator/denomination"}), 404
+                    return jsonify({
+                        "success": False,
+                        "error": "No cards available for this operator/denomination"
+                    }), 404
 
                 # Mark card as sold
                 cur.execute(
@@ -661,7 +664,11 @@ def admin_stats():
         transactions_count = query_db("SELECT COUNT(*) as count FROM transactions", fetchone=True)
         cards_sold = query_db("SELECT COUNT(*) as count FROM cards WHERE is_sold = TRUE", fetchone=True)
         cards_available = query_db("SELECT COUNT(*) as count FROM cards WHERE is_sold = FALSE", fetchone=True)
-        revenue = query_db("SELECT COALESCE(SUM(amount), 0) as total FROM transactions WHERE status = 'completed'", fetchone=True)
+        revenue = query_db(
+            "SELECT COALESCE(SUM(amount), 0) as total FROM transactions "
+            "WHERE status = 'completed'",
+            fetchone=True
+        )
 
         recent_transactions = query_db(
             """SELECT t.id, t.type, t.operator, t.amount, t.phone_number, t.status, t.created_at,
