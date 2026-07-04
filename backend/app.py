@@ -51,12 +51,35 @@ logger = logging.getLogger("chargehub")
 # ---------------------------------------------------------------------------
 
 try:
-    from prometheus_flask_instrumentator import Instrumentator
+    from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
+    from flask import Response
 
-    Instrumentator().instrument(app).expose(app, endpoint="/metrics")
+    REQUEST_COUNT = Counter('http_requests_total', 'Total HTTP requests', ['method', 'endpoint', 'status'])
+    REQUEST_LATENCY = Histogram('http_request_duration_seconds', 'HTTP request latency', ['method', 'endpoint'])
+
+    @app.before_request
+    def before_request_metrics():
+        from flask import g
+        import time
+        g.start_time = time.time()
+
+    @app.after_request
+    def after_request_metrics(response):
+        from flask import g
+        import time
+        if hasattr(g, 'start_time'):
+            latency = time.time() - g.start_time
+            REQUEST_COUNT.labels(method=request.method, endpoint=request.path, status=response.status_code).inc()
+            REQUEST_LATENCY.labels(method=request.method, endpoint=request.path).observe(latency)
+        return response
+
+    @app.route("/metrics")
+    def metrics():
+        return Response(generate_latest(), mimetype=CONTENT_TYPE_LATEST)
+
     logger.info("Prometheus metrics enabled at /metrics")
 except ImportError:
-    logger.warning("prometheus-flask-instrumentator not installed; metrics disabled")
+    logger.warning("prometheus-client not installed; metrics disabled")
 
 # ---------------------------------------------------------------------------
 # Database Helpers
@@ -346,6 +369,20 @@ def recharge():
     # Validate phone number format (Egyptian format: 01XXXXXXXXX)
     if len(phone_number) != 11 or not phone_number.startswith("0"):
         return jsonify({"success": False, "error": "Phone number must be 11 digits starting with 0"}), 400
+
+    # Validate phone prefix matches selected operator
+    operator_prefixes = {
+        "vodafone": "010",
+        "etisalat": "011",
+        "orange": "012",
+        "we": "015",
+    }
+    expected_prefix = operator_prefixes.get(operator)
+    if expected_prefix and not phone_number.startswith(expected_prefix):
+        return jsonify({
+            "success": False,
+            "error": f"رقم الهاتف لا يتوافق مع الشبكة المختارة. {operator} يبدأ بـ {expected_prefix}",
+        }), 400
 
     try:
         # Check user balance

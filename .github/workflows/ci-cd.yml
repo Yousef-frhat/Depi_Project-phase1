@@ -132,8 +132,53 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Deploy notification
+      # ---------------------------------------------------------
+      # REQUIRED GITHUB SECRETS (configure in repo Settings → Secrets):
+      #   DEPLOY_HOST     - Production server IP/hostname
+      #   DEPLOY_USER     - SSH username (e.g. ubuntu)
+      #   DEPLOY_SSH_KEY  - Private SSH key for the deploy user
+      # ---------------------------------------------------------
+      - name: Setup SSH key
         run: |
-          echo "🚀 Deploying ChargeHub to production..."
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Deploy via SSH
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} << 'EOF'
+          set -e
+          cd /opt/chargehub
+
+          # Pull latest images from GHCR
+          echo "🔄 Pulling latest images..."
+          docker compose pull
+
+          # Restart services with new images
+          echo "🚀 Starting updated services..."
+          docker compose up -d --remove-orphans
+
+          # Wait for backend health
+          echo "⏳ Waiting for backend to be healthy..."
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:5000/api/health > /dev/null 2>&1; then
+              echo "✅ Backend is healthy!"
+              break
+            fi
+            if [ "$i" -eq 30 ]; then
+              echo "❌ Backend health check failed after 30 attempts"
+              exit 1
+            fi
+            sleep 5
+          done
+
+          echo "✅ Deployment complete!"
+          EOF
+
+      - name: Deployment summary
+        run: |
+          echo "🚀 Deployed ChargeHub to production"
           echo "Backend image: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.BACKEND_IMAGE }}:${{ github.sha }}"
           echo "Frontend image: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.FRONTEND_IMAGE }}:${{ github.sha }}"

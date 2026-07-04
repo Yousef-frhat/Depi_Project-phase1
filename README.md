@@ -55,31 +55,40 @@ docker compose up -d --build
 
 ```
 ├── backend/                 # Flask microservices
-│   ├── app.py              # Main application
-│   ├── init_db.py          # Database initialization
+│   ├── app.py              # Main application (JWT, recharge, cards, admin)
+│   ├── init_db.py          # Database initialization & seed data
 │   ├── requirements.txt    # Python dependencies
 │   └── Dockerfile
-├── frontend/               # Web application
-│   ├── index.html          # Main page (Arabic RTL)
-│   ├── styles.css          # Modern dark theme
-│   ├── app.js              # Frontend logic
-│   ├── nginx.conf          # Nginx configuration
+├── frontend/               # Web application (Arabic RTL, dark theme)
+│   ├── index.html          # Landing page
+│   ├── login.html          # Login & registration page
+│   ├── dashboard.html      # Main user dashboard (recharge, cards, history, profile)
+│   ├── admin.html          # Admin panel (restricted to admin@chargehub.com)
+│   ├── styles.css          # Modern dark theme styles
+│   ├── nginx.conf          # Nginx config with API proxy
 │   └── Dockerfile
 ├── k8s/                    # Kubernetes manifests
 │   ├── namespace.yaml
-│   ├── postgres.yaml
-│   ├── backend.yaml
-│   └── frontend.yaml
-├── monitoring/             # Monitoring configuration
-│   ├── prometheus.yml
+│   ├── postgres.yaml       # PostgreSQL with PVC (5Gi)
+│   ├── db-init-job.yaml    # Database initialization Job
+│   ├── backend.yaml        # Backend Deployment + HPA + Service
+│   └── frontend.yaml       # Frontend Deployment + Service + Ingress
+├── monitoring/             # Monitoring & logging configuration
+│   ├── prometheus.yml      # Prometheus scrape config
+│   ├── promtail.yml        # Promtail log collection config
 │   └── grafana/
+│       ├── dashboards/
+│       │   ├── dashboard.yml                # Provisioning config
+│       │   └── chargehub-dashboard.json     # API monitoring dashboard
+│       └── datasources/
+│           └── datasource.yml               # Prometheus + Loki datasources
 ├── ansible/                # Automation playbooks
 │   ├── inventory.yml
 │   ├── playbook-deploy.yml
 │   └── playbook-monitoring.yml
 ├── .github/workflows/      # CI/CD pipeline
-│   └── ci-cd.yml
-└── docker-compose.yml      # Full stack composition
+│   └── ci-cd.yml           # 3-stage: test → build → deploy
+└── docker-compose.yml      # Full stack composition (8 services)
 ```
 
 ## 🔌 API Endpoints
@@ -90,12 +99,14 @@ docker compose up -d --build
 | POST | /api/auth/login | Login | ❌ |
 | GET | /api/auth/profile | Get user profile | ✅ |
 | GET | /api/recharge/operators | List operators | ❌ |
-| POST | /api/recharge | Recharge phone | ✅ |
+| POST | /api/recharge | Recharge phone (validates prefix per operator) | ✅ |
 | GET | /api/cards/available | Available cards | ❌ |
 | POST | /api/cards/purchase | Buy scratch card | ✅ |
-| GET | /api/transactions | Transaction history | ✅ |
+| GET | /api/transactions | Transaction history (paginated) | ✅ |
+| GET | /api/admin/stats | Platform statistics | ❌ |
+| POST | /api/admin/add-balance | Add balance to user | ❌ |
 | GET | /api/health | Health check | ❌ |
-| GET | /metrics | Prometheus metrics | ❌ |
+| GET | /metrics | Prometheus metrics (via prometheus-flask-instrumentator) | ❌ |
 
 ## 👥 Team Roles
 

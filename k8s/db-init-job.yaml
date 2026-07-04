@@ -1,0 +1,45 @@
+# ChargeHub Database Initialization Job
+# Apply AFTER postgres is confirmed ready:
+#   kubectl apply -f k8s/namespace.yaml
+#   kubectl apply -f k8s/postgres.yaml
+#   (wait for postgres pod to be Ready)
+#   kubectl apply -f k8s/db-init-job.yaml
+#   kubectl apply -f k8s/backend.yaml
+#   kubectl apply -f k8s/frontend.yaml
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: db-init
+  namespace: chargehub
+spec:
+  backoffLimit: 5
+  template:
+    metadata:
+      labels:
+        app: db-init
+    spec:
+      initContainers:
+        - name: wait-for-postgres
+          image: postgres:16-alpine
+          command:
+            - sh
+            - -c
+            - |
+              echo "Waiting for PostgreSQL to be ready..."
+              until pg_isready -h postgres-service -p 5432 -U chargehub; do
+                echo "PostgreSQL not ready yet, retrying in 2s..."
+                sleep 2
+              done
+              echo "PostgreSQL is ready!"
+      containers:
+        - name: db-init
+          image: chargehub-backend:latest
+          imagePullPolicy: Never
+          command: ["python", "init_db.py"]
+          envFrom:
+            - configMapRef:
+                name: backend-config
+            - secretRef:
+                name: backend-secret
+      restartPolicy: OnFailure
