@@ -11,6 +11,9 @@ env:
   BACKEND_IMAGE: chargehub-backend
   FRONTEND_IMAGE: chargehub-frontend
 
+permissions:
+  contents: read
+  packages: write
 jobs:
   # ============================================================
   # LINT & TEST
