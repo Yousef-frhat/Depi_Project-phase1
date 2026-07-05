@@ -29,6 +29,20 @@ def generate_pin():
     return "".join(random.choices(string.digits, k=14))
 
 
+# Price mapping: denomination (credit) -> price (what user pays)
+# Formula: 10 EGP cash = 7 EGP credit (30% tax/commission)
+# So: price = credit / 0.7
+DENOMINATION_PRICE_MAP = {
+    7.00: 10.00,
+    14.00: 20.00,
+    21.00: 30.00,
+    35.00: 50.00,
+    70.00: 100.00,
+    105.00: 150.00,
+    140.00: 200.00,
+    350.00: 500.00,
+}
+
 # ---------------------------------------------------------------------------
 # Schema DDL
 # ---------------------------------------------------------------------------
@@ -64,6 +78,7 @@ CREATE TABLE IF NOT EXISTS cards (
     id              SERIAL PRIMARY KEY,
     operator        VARCHAR(20) NOT NULL,
     denomination    DECIMAL(10, 2) NOT NULL,
+    price           DECIMAL(10, 2) NOT NULL,
     serial_number   VARCHAR(20) UNIQUE NOT NULL,
     pin             VARCHAR(20) NOT NULL,
     is_sold         BOOLEAN DEFAULT FALSE,
@@ -142,7 +157,7 @@ def init_database():
 def seed_cards(cur):
     """Insert sample scratch cards for all operators and denominations."""
     operators = ["vodafone", "etisalat", "orange", "we"]
-    denominations = [5.00, 10.00, 15.00, 20.00, 25.00, 50.00, 100.00, 200.00]
+    denominations = [7.00, 14.00, 21.00, 35.00, 70.00, 105.00, 140.00, 350.00]
     cards_per_combo = 10  # 10 cards per operator/denomination combination
 
     # Check if cards already exist
@@ -155,15 +170,16 @@ def seed_cards(cur):
     cards_data = []
     for operator in operators:
         for denomination in denominations:
+            price = DENOMINATION_PRICE_MAP[denomination]
             for _ in range(cards_per_combo):
                 serial = generate_serial_number()
                 pin = generate_pin()
-                cards_data.append((operator, denomination, serial, pin))
+                cards_data.append((operator, denomination, price, serial, pin))
 
     # Batch insert for performance
     insert_sql = """
-        INSERT INTO cards (operator, denomination, serial_number, pin)
-        VALUES (%s, %s, %s, %s)
+        INSERT INTO cards (operator, denomination, price, serial_number, pin)
+        VALUES (%s, %s, %s, %s, %s)
     """
     cur.executemany(insert_sql, cards_data)
     print(f"  → Inserted {len(cards_data)} scratch cards")

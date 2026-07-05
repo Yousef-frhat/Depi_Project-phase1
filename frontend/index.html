@@ -4,13 +4,39 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ChargeHub - شحن رصيد وكروت فكة</title>
+    <link rel="icon" type="image/png" href="/logo.png">
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
+    <style>
+        .operators-section { padding: 60px 0; background: var(--bg-secondary); }
+        .operators-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; max-width: 800px; margin: 0 auto; }
+        .operator-logo-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 30px 20px;
+            text-align: center;
+            transition: var(--transition);
+        }
+        .operator-logo-card:hover { transform: translateY(-4px); box-shadow: 0 8px 25px rgba(0,0,0,0.3); border-color: var(--primary); }
+        .operator-logo-card img { width: 80px; height: 80px; object-fit: contain; border-radius: 16px; }
+
+        @media (max-width: 768px) {
+            .operators-grid { grid-template-columns: repeat(2, 1fr); gap: 16px; }
+            .operator-logo-card { padding: 20px 12px; }
+            .operator-logo-card img { width: 60px; height: 60px; }
+        }
+        @media (max-width: 480px) {
+            .operators-grid { grid-template-columns: repeat(2, 1fr); gap: 12px; }
+            .operator-logo-card { padding: 16px 10px; }
+            .operator-logo-card img { width: 50px; height: 50px; }
+        }
+    </style>
 </head>
 <body>
     <nav class="navbar">
         <div class="container nav-content">
-            <div class="logo"><span class="logo-icon">⚡</span><span class="logo-text">ChargeHub</span></div>
+            <div class="logo"><img src="/logo.png" alt="ChargeHub" style="width:32px;height:32px;border-radius:8px;"><span class="logo-text">ChargeHub</span></div>
             <div><a href="login.html" class="btn btn-primary">تسجيل الدخول</a></div>
         </div>
     </nav>
@@ -20,36 +46,78 @@
             <div class="hero-content">
                 <h1>اشحن رصيدك <span class="highlight">بسهولة</span></h1>
                 <p>منصة شحن الرصيد وكروت الفكة الأولى في مصر لجميع الشبكات</p>
-                <div class="hero-operators">
-                    <div class="operator-badge vodafone">Vodafone</div>
-                    <div class="operator-badge etisalat">Etisalat</div>
-                    <div class="operator-badge orange">Orange</div>
-                    <div class="operator-badge we">WE</div>
-                </div>
                 <a href="login.html" class="btn btn-primary btn-lg">ابدأ الآن</a>
             </div>
         </div>
     </section>
 
+    <!-- Operators Section with Logos -->
+    <section class="operators-section">
+        <div class="container">
+            <h2 class="section-title">الشبكات المدعومة</h2>
+            <p class="section-subtitle">اشحن أي رقم على أي شبكة في مصر</p>
+            <div class="operators-grid">
+                <div class="operator-logo-card">
+                    <img src="/vodafone.png" alt="Vodafone">
+                </div>
+                <div class="operator-logo-card">
+                    <img src="/etisalat.png" alt="Etisalat">
+                </div>
+                <div class="operator-logo-card">
+                    <img src="/orange.png" alt="Orange">
+                </div>
+                <div class="operator-logo-card">
+                    <img src="/we.png" alt="WE">
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
     <section class="section">
         <div class="container">
             <h2 class="section-title">ليه ChargeHub؟</h2>
             <p class="section-subtitle">خدمات مميزة وسهلة الاستخدام</p>
-            <div class="features-grid">
+            <div class="features-grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:20px;">
                 <div class="card" style="text-align:center;padding:40px 24px;">
-                    <div style="font-size:2.5rem;margin-bottom:12px;">📱</div>
+                    <div style="font-size:2.5rem;margin-bottom:12px;">⚡</div>
                     <h3 style="margin-bottom:8px;">شحن فوري</h3>
-                    <p style="color:var(--text-secondary);">اشحن أي رقم في ثواني لجميع الشبكات المصرية</p>
+                    <p style="color:var(--text-secondary);">اشحن أي رقم في ثواني لجميع الشبكات المصرية بضغطة واحدة</p>
                 </div>
                 <div class="card" style="text-align:center;padding:40px 24px;">
-                    <div style="font-size:2.5rem;margin-bottom:12px;">💳</div>
+                    <div style="font-size:2.5rem;margin-bottom:12px;">🎫</div>
                     <h3 style="margin-bottom:8px;">كروت فكة</h3>
-                    <p style="color:var(--text-secondary);">اشتري كروت شحن بجميع الفئات واحصل على الرقم فوراً</p>
+                    <p style="color:var(--text-secondary);">اشتري كروت شحن بجميع الفئات واحصل على السيريال والـ PIN فوراً</p>
                 </div>
                 <div class="card" style="text-align:center;padding:40px 24px;">
-                    <div style="font-size:2.5rem;margin-bottom:12px;">🔒</div>
+                    <div style="font-size:2.5rem;margin-bottom:12px;">🔐</div>
                     <h3 style="margin-bottom:8px;">آمان كامل</h3>
-                    <p style="color:var(--text-secondary);">جميع المعاملات مؤمنة بأحدث تقنيات التشفير</p>
+                    <p style="color:var(--text-secondary);">جميع المعاملات مؤمنة بأحدث تقنيات التشفير وحماية البيانات</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- How it works -->
+    <section class="section" style="background:var(--bg-secondary);">
+        <div class="container">
+            <h2 class="section-title">إزاي تشحن؟</h2>
+            <p class="section-subtitle">3 خطوات بس وخلاص</p>
+            <div class="features-grid">
+                <div class="card" style="text-align:center;padding:30px 24px;border-top:3px solid var(--primary);">
+                    <div style="font-size:2rem;margin-bottom:8px;color:var(--primary);font-weight:800;">1</div>
+                    <h3 style="margin-bottom:8px;font-size:1rem;">سجّل حسابك</h3>
+                    <p style="color:var(--text-secondary);font-size:0.85rem;">اعمل حساب مجاني واختار نوع الباقة المناسبة ليك</p>
+                </div>
+                <div class="card" style="text-align:center;padding:30px 24px;border-top:3px solid var(--secondary);">
+                    <div style="font-size:2rem;margin-bottom:8px;color:var(--secondary);font-weight:800;">2</div>
+                    <h3 style="margin-bottom:8px;font-size:1rem;">اشحن رصيدك</h3>
+                    <p style="color:var(--text-secondary);font-size:0.85rem;">حوّل فلوس على حسابك عن طريق فودافون كاش أو انستاباي أو كارت بنكي</p>
+                </div>
+                <div class="card" style="text-align:center;padding:30px 24px;border-top:3px solid var(--accent);">
+                    <div style="font-size:2rem;margin-bottom:8px;color:var(--accent);font-weight:800;">3</div>
+                    <h3 style="margin-bottom:8px;font-size:1rem;">اشحن أي رقم</h3>
+                    <p style="color:var(--text-secondary);font-size:0.85rem;">اختار الشبكة والرقم والمبلغ واشحن في ثانية</p>
                 </div>
             </div>
         </div>
@@ -62,8 +130,13 @@
     </footer>
 
     <script>
-        // If already logged in, redirect to dashboard
-        if (localStorage.getItem('token')) { window.location.href = 'dashboard.html'; }
+        if (localStorage.getItem('token')) {
+            if (!localStorage.getItem('plan_selected')) {
+                window.location.href = 'plans.html';
+            } else {
+                window.location.href = 'dashboard.html';
+            }
+        }
     </script>
 </body>
 </html>

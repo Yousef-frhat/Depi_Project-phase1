@@ -4,14 +4,71 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ChargeHub - لوحة التحكم</title>
+    <link rel="icon" type="image/png" href="/logo.png">
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
+    <style>
+        .amount-card-new {
+            padding: 14px;
+            text-align: center;
+            background: var(--bg-secondary);
+            border: 2px solid var(--border);
+            border-radius: var(--radius);
+            cursor: pointer;
+            font-weight: 700;
+            transition: var(--transition);
+        }
+        .amount-card-new:hover {
+            border-color: var(--secondary);
+            transform: translateY(-2px);
+        }
+        .amount-card-new.selected {
+            border-color: var(--secondary);
+            background: rgba(0, 212, 170, 0.1);
+            color: var(--secondary);
+            box-shadow: 0 0 0 3px rgba(0, 212, 170, 0.2);
+        }
+        .amount-card-new .credit-val {
+            font-size: 1.2rem;
+            font-weight: 800;
+        }
+        .amount-card-new .price-val {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            margin-top: 4px;
+        }
+        .amount-card-new.selected .price-val {
+            color: var(--secondary);
+            opacity: 0.8;
+        }
+        .operator-block {
+            margin-bottom: 30px;
+        }
+        .operator-block-title {
+            font-size: 1.2rem;
+            font-weight: 800;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .operator-block-title .op-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+        .op-dot.vodafone { background: var(--vodafone); }
+        .op-dot.etisalat { background: var(--etisalat); }
+        .op-dot.orange { background: var(--orange); }
+        .op-dot.we { background: var(--we); }
+    </style>
 </head>
 <body>
     <nav class="navbar">
         <div class="container nav-content">
-            <a href="dashboard.html" class="logo"><span class="logo-icon">⚡</span><span class="logo-text">ChargeHub</span></a>
+            <a href="dashboard.html" class="logo"><img src="/logo.png" alt="ChargeHub" style="width:32px;height:32px;border-radius:8px;"><span class="logo-text">ChargeHub</span></a>
             <div style="display:flex;align-items:center;gap:12px;">
+                <a href="admin.html" id="admin-link" class="btn btn-sm" style="display:none;background:var(--accent);color:#fff;font-weight:700;padding:6px 14px;border-radius:8px;text-decoration:none;">لوحة الأدمن</a>
                 <span class="user-balance" id="user-balance">0 ج.م</span>
                 <span style="color:var(--text-secondary);font-weight:600;" id="user-name"></span>
                 <button class="btn btn-outline btn-sm" onclick="logout()">خروج</button>
@@ -47,15 +104,8 @@
                 <input type="tel" id="phone" placeholder="01XXXXXXXXX" maxlength="11" dir="ltr">
             </div>
             <div class="form-group">
-                <label>المبلغ</label>
-                <div class="amount-grid">
-                    <div class="amount-card" data-amt="5" onclick="selAmt(this)">5 ج.م</div>
-                    <div class="amount-card" data-amt="10" onclick="selAmt(this)">10 ج.م</div>
-                    <div class="amount-card" data-amt="25" onclick="selAmt(this)">25 ج.م</div>
-                    <div class="amount-card" data-amt="50" onclick="selAmt(this)">50 ج.م</div>
-                    <div class="amount-card" data-amt="100" onclick="selAmt(this)">100 ج.م</div>
-                    <div class="amount-card" data-amt="200" onclick="selAmt(this)">200 ج.م</div>
-                </div>
+                <label>اختر فئة الشحن</label>
+                <div class="amount-grid" id="amounts-grid"></div>
             </div>
             <button class="btn btn-primary btn-block" onclick="doRecharge()">اشحن الآن</button>
             <div id="recharge-msg" style="margin-top:12px;text-align:center;font-weight:700;display:none;"></div>
@@ -65,7 +115,7 @@
     <!-- Cards Tab -->
     <section class="container" id="sec-cards" style="display:none;">
         <h2 style="margin-bottom:20px;">كروت فكة</h2>
-        <div class="cards-grid" id="cards-grid"></div>
+        <div id="cards-container"></div>
     </section>
 
     <!-- History Tab -->
@@ -92,14 +142,38 @@
         const API = '/api';
         let token = localStorage.getItem('token');
         let user = JSON.parse(localStorage.getItem('user') || '{}');
-        let selOperator = null, selAmount = null;
+        let selOperator = null, selCredit = null;
+
+        // Recharge amounts: price is what user pays, credit is what gets recharged
+        // Formula: 10 EGP cash = 7 EGP credit (30% tax/commission)
+        const RECHARGE_AMOUNTS = [
+            {price: 10, credit: 7},
+            {price: 20, credit: 14},
+            {price: 30, credit: 21},
+            {price: 50, credit: 35},
+            {price: 100, credit: 70},
+            {price: 150, credit: 105},
+            {price: 200, credit: 140},
+            {price: 500, credit: 350},
+        ];
 
         if (!token) { window.location.href = 'login.html'; }
         else { initDashboard(); }
 
         function initDashboard() {
+            renderAmounts();
             fetchProfile();
             loadCards();
+        }
+
+        function renderAmounts() {
+            const grid = document.getElementById('amounts-grid');
+            grid.innerHTML = RECHARGE_AMOUNTS.map(a => `
+                <div class="amount-card-new" data-credit="${a.credit}" data-price="${a.price}" onclick="selAmt(this)">
+                    <div class="credit-val">${a.credit} ج.م</div>
+                    <div class="price-val">السعر: ${a.price} ج.م</div>
+                </div>
+            `).join('');
         }
 
         async function fetchProfile() {
@@ -121,6 +195,10 @@
             document.getElementById('p-email').textContent = user.email || '';
             document.getElementById('p-balance').textContent = user.balance?.toFixed(2) || '0';
             document.getElementById('p-date').textContent = user.created_at ? new Date(user.created_at).toLocaleDateString('ar-EG') : '';
+            // Show admin link if user is admin
+            if (user.email === 'admin@chargehub.com') {
+                document.getElementById('admin-link').style.display = 'inline-block';
+            }
         }
 
         function logout() { localStorage.clear(); window.location.href = 'login.html'; }
@@ -139,17 +217,18 @@
             el.classList.add('selected'); selOperator = el.dataset.op;
         }
         function selAmt(el) {
-            document.querySelectorAll('.amount-card').forEach(c=>c.classList.remove('selected'));
-            el.classList.add('selected'); selAmount = parseFloat(el.dataset.amt);
+            document.querySelectorAll('.amount-card-new').forEach(c=>c.classList.remove('selected'));
+            el.classList.add('selected');
+            selCredit = parseFloat(el.dataset.credit);
         }
 
         async function doRecharge() {
             const phone = document.getElementById('phone').value.trim();
             if(!selOperator){toast('اختر الشبكة','error');return;}
             if(!phone||phone.length!==11){toast('أدخل رقم صحيح (11 رقم)','error');return;}
-            if(!selAmount){toast('اختر المبلغ','error');return;}
+            if(!selCredit){toast('اختر فئة الشحن','error');return;}
             try {
-                const res = await fetch(`${API}/recharge`, {method:'POST', headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`}, body:JSON.stringify({phone_number:phone,operator:selOperator,amount:selAmount})});
+                const res = await fetch(`${API}/recharge`, {method:'POST', headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`}, body:JSON.stringify({phone_number:phone,operator:selOperator,amount:selCredit})});
                 const data = await res.json();
                 if(data.success){toast('تم الشحن بنجاح! ✅','success'); fetchProfile(); document.getElementById('phone').value='';} 
                 else {toast(data.error,'error');}
@@ -162,19 +241,35 @@
                 const data = await res.json();
                 if(data.success) {
                     const names={vodafone:'فودافون',etisalat:'اتصالات',orange:'اورنج',we:'وي'};
-                    document.getElementById('cards-grid').innerHTML = data.data.map(c=>`
-                        <div class="card-item">
-                            <div class="card-item-header"><span class="card-item-operator">${names[c.operator]||c.operator}</span><span class="card-item-badge">متاح</span></div>
-                            <div class="card-item-amount">${c.denomination} ج.م</div>
-                            <div class="card-item-count">${c.available_count} كارت</div>
-                            <button class="btn btn-primary" style="width:100%" onclick="buyCard('${c.operator}',${c.denomination})">شراء</button>
-                        </div>`).join('') || '<p class="empty-state">لا توجد كروت</p>';
+                    const operators = ['vodafone','etisalat','orange','we'];
+                    let html = '';
+
+                    operators.forEach(op => {
+                        const opCards = data.data.filter(c => c.operator === op);
+                        if (opCards.length === 0) return;
+                        html += `<div class="operator-block">
+                            <div class="operator-block-title"><span class="op-dot ${op}"></span>${names[op]}</div>
+                            <div class="cards-grid">`;
+                        opCards.forEach(c => {
+                            html += `<div class="card-item">
+                                <div class="card-item-header"><span class="card-item-operator">${names[c.operator]}</span><span class="card-item-badge">متاح</span></div>
+                                <div class="card-item-amount">${c.denomination} ج.م</div>
+                                <div style="color:var(--text-secondary);font-size:0.85rem;margin-bottom:4px;">السعر: <strong style="color:var(--primary)">${c.price} ج.م</strong></div>
+                                <div class="card-item-count">${c.available_count} كارت متاح</div>
+                                <button class="btn btn-primary" style="width:100%" onclick="buyCard('${c.operator}',${c.denomination},${c.price})">شراء</button>
+                            </div>`;
+                        });
+                        html += `</div></div>`;
+                    });
+
+                    document.getElementById('cards-container').innerHTML = html || '<p class="empty-state">لا توجد كروت</p>';
                 }
             } catch(e){}
         }
 
-        async function buyCard(op,denom) {
-            if(!confirm(`شراء كارت ${op} بقيمة ${denom} ج.م؟`)) return;
+        async function buyCard(op, denom, price) {
+            const names={vodafone:'فودافون',etisalat:'اتصالات',orange:'اورنج',we:'وي'};
+            if(!confirm(`شراء كارت ${names[op]} فئة ${denom} ج.م بسعر ${price} ج.م؟`)) return;
             try {
                 const res = await fetch(`${API}/cards/purchase`, {method:'POST', headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`}, body:JSON.stringify({operator:op,denomination:denom})});
                 const data = await res.json();

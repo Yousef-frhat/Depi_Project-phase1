@@ -4,10 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ChargeHub - Admin Panel</title>
+    <link rel="icon" type="image/png" href="/logo.png">
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
     <style>
-        .admin-container{max-width:1200px;margin:90px auto 40px;padding:0 20px}
+        .admin-container{max-width:1300px;margin:90px auto 40px;padding:0 20px}
         .stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:30px}
         .stat-card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:24px;text-align:center}
         .stat-card h3{font-size:2rem;margin-bottom:4px;background:linear-gradient(135deg,var(--primary),var(--secondary));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
@@ -17,15 +18,32 @@
         .admin-table{width:100%;border-collapse:collapse;background:var(--bg-card);border-radius:var(--radius);overflow:hidden;font-size:0.85rem}
         .admin-table th,.admin-table td{padding:10px 14px;text-align:right;border-bottom:1px solid var(--border)}
         .admin-table th{background:var(--bg-secondary);font-weight:700;color:var(--text-secondary)}
+        .admin-table tr:hover{background:rgba(108,99,255,0.05)}
         .add-form{display:flex;gap:10px;align-items:end;flex-wrap:wrap;background:var(--bg-card);padding:16px;border-radius:var(--radius);border:1px solid var(--border);margin-bottom:20px}
-        .add-form input{padding:10px;background:var(--bg-secondary);border:2px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-family:'Cairo',sans-serif;width:120px}
+        .add-form input{padding:10px;background:var(--bg-secondary);border:2px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-family:'Cairo',sans-serif;width:140px}
         .add-form input:focus{outline:none;border-color:var(--primary)}
+        .admin-tabs{display:flex;gap:10px;margin-bottom:24px;flex-wrap:wrap}
+        .admin-tab{padding:8px 18px;border-radius:var(--radius);cursor:pointer;font-weight:700;font-size:0.85rem;border:2px solid var(--border);background:var(--bg-secondary);color:var(--text-secondary);transition:var(--transition)}
+        .admin-tab.active{border-color:var(--primary);background:rgba(108,99,255,0.1);color:var(--primary)}
+        .admin-tab:hover{border-color:var(--primary)}
+        .tab-content{display:none}
+        .tab-content.active{display:block}
+        .btn-xs{padding:4px 10px;font-size:0.75rem;border-radius:8px}
+        .modal-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);backdrop-filter:blur(5px);display:none;justify-content:center;align-items:center;z-index:2000}
+        .modal-overlay.active{display:flex}
+        .modal-box{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:30px;width:100%;max-width:700px;max-height:80vh;overflow-y:auto}
+        .modal-box h3{margin-bottom:16px}
+        .inv-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:16px}
+        .inv-card{background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:16px}
+        .inv-card h4{margin-bottom:10px;display:flex;align-items:center;gap:8px}
+        .inv-card .inv-row{display:flex;justify-content:space-between;padding:4px 0;font-size:0.85rem;border-bottom:1px solid var(--border)}
+        .inv-card .inv-row:last-child{border-bottom:none}
     </style>
 </head>
 <body>
     <nav class="navbar">
         <div class="container nav-content">
-            <div class="logo"><span class="logo-icon">⚡</span><span class="logo-text">Admin Panel</span></div>
+            <div class="logo"><img src="/logo.png" alt="ChargeHub" style="width:32px;height:32px;border-radius:8px;"><span class="logo-text">Admin Panel</span></div>
             <div style="display:flex;gap:10px;">
                 <a href="dashboard.html" class="btn btn-outline btn-sm">← الداشبورد</a>
                 <button class="btn btn-outline btn-sm" onclick="localStorage.clear();location.href='login.html'">خروج</button>
@@ -34,6 +52,8 @@
     </nav>
     <div class="admin-container" id="admin-content">
         <h1 style="margin-bottom:20px">لوحة تحكم الأدمن</h1>
+
+        <!-- Stats -->
         <div class="stats-grid">
             <div class="stat-card"><h3 id="s-users">-</h3><p>المستخدمين</p></div>
             <div class="stat-card"><h3 id="s-transactions">-</h3><p>العمليات</p></div>
@@ -41,29 +61,87 @@
             <div class="stat-card"><h3 id="s-cards-sold">-</h3><p>كروت مباعة</p></div>
             <div class="stat-card"><h3 id="s-cards-available">-</h3><p>كروت متاحة</p></div>
         </div>
-        <div class="admin-section">
-            <h2>إضافة رصيد</h2>
-            <div class="add-form">
-                <div class="form-group" style="margin:0"><label style="font-size:0.8rem">User ID</label><input type="number" id="bal-uid" min="1"></div>
-                <div class="form-group" style="margin:0"><label style="font-size:0.8rem">المبلغ</label><input type="number" id="bal-amt" min="1"></div>
-                <button class="btn btn-primary btn-sm" onclick="addBal()">إضافة</button>
+
+        <!-- Admin Tabs -->
+        <div class="admin-tabs">
+            <div class="admin-tab active" onclick="showAdminTab('users')">المستخدمين</div>
+            <div class="admin-tab" onclick="showAdminTab('transactions')">العمليات</div>
+            <div class="admin-tab" onclick="showAdminTab('balance')">إضافة رصيد</div>
+            <div class="admin-tab" onclick="showAdminTab('inventory')">مخزون الكروت</div>
+        </div>
+
+        <!-- Users Tab -->
+        <div class="tab-content active" id="tab-users">
+            <div class="admin-section">
+                <h2>جميع المستخدمين</h2>
+                <div style="overflow-x:auto;">
+                    <table class="admin-table">
+                        <thead><tr><th>ID</th><th>الاسم</th><th>الإيميل</th><th>الرصيد</th><th>تاريخ التسجيل</th><th>إجراءات</th></tr></thead>
+                        <tbody id="tb-users"></tbody>
+                    </table>
+                </div>
             </div>
         </div>
-        <div class="admin-section">
-            <h2>المستخدمين</h2>
-            <table class="admin-table"><thead><tr><th>ID</th><th>الاسم</th><th>الإيميل</th><th>الرصيد</th></tr></thead><tbody id="tb-users"></tbody></table>
+
+        <!-- Transactions Tab -->
+        <div class="tab-content" id="tab-transactions">
+            <div class="admin-section">
+                <h2>آخر العمليات</h2>
+                <div style="overflow-x:auto;">
+                    <table class="admin-table">
+                        <thead><tr><th>ID</th><th>المستخدم</th><th>النوع</th><th>الشبكة</th><th>المبلغ</th><th>الرقم</th><th>الحالة</th><th>التاريخ</th></tr></thead>
+                        <tbody id="tb-tx"></tbody>
+                    </table>
+                </div>
+            </div>
         </div>
-        <div class="admin-section">
-            <h2>آخر العمليات</h2>
-            <table class="admin-table"><thead><tr><th>المستخدم</th><th>النوع</th><th>الشبكة</th><th>المبلغ</th><th>التاريخ</th></tr></thead><tbody id="tb-tx"></tbody></table>
+
+        <!-- Balance Tab -->
+        <div class="tab-content" id="tab-balance">
+            <div class="admin-section">
+                <h2>إضافة رصيد لمستخدم</h2>
+                <div class="add-form">
+                    <div class="form-group" style="margin:0"><label style="font-size:0.8rem">User ID</label><input type="number" id="bal-uid" min="1" placeholder="رقم المستخدم"></div>
+                    <div class="form-group" style="margin:0"><label style="font-size:0.8rem">المبلغ (ج.م)</label><input type="number" id="bal-amt" min="1" placeholder="المبلغ"></div>
+                    <button class="btn btn-primary btn-sm" onclick="addBal()">إضافة رصيد</button>
+                </div>
+                <div id="bal-result" style="margin-top:12px;font-weight:700;display:none;"></div>
+            </div>
+        </div>
+
+        <!-- Inventory Tab -->
+        <div class="tab-content" id="tab-inventory">
+            <div class="admin-section">
+                <h2>مخزون الكروت حسب الشبكة</h2>
+                <div class="inv-grid" id="inv-grid"></div>
+            </div>
         </div>
     </div>
+
+    <!-- User Transactions Modal -->
+    <div class="modal-overlay" id="user-tx-modal" onclick="closeModal(event)">
+        <div class="modal-box" onclick="event.stopPropagation()">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+                <h3 id="modal-title">عمليات المستخدم</h3>
+                <button class="btn btn-outline btn-xs" onclick="document.getElementById('user-tx-modal').classList.remove('active')">✕</button>
+            </div>
+            <div id="modal-body" style="overflow-x:auto;"></div>
+        </div>
+    </div>
+
     <script>
         const API='/api';
         const u=JSON.parse(localStorage.getItem('user')||'{}');
         if(!localStorage.getItem('token')||u.email!=='admin@chargehub.com'){
             document.getElementById('admin-content').innerHTML='<div class="card" style="text-align:center;padding:60px"><h2>⛔ غير مصرح</h2><p style="color:var(--text-secondary);margin:12px 0">سجل بحساب الأدمن (admin@chargehub.com)</p><a href="login.html" class="btn btn-primary">تسجيل الدخول</a></div>';
         } else { load(); }
+
+        function showAdminTab(tab) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.admin-tab').forEach(el => el.classList.remove('active'));
+            document.getElementById('tab-'+tab).classList.add('active');
+            event.target.classList.add('active');
+        }
 
         async function load(){
             const res=await fetch(`${API}/admin/stats`);
@@ -75,18 +153,106 @@
             document.getElementById('s-revenue').textContent=s.total_revenue.toFixed(0)+' ج.م';
             document.getElementById('s-cards-sold').textContent=s.cards_sold;
             document.getElementById('s-cards-available').textContent=s.cards_available;
-            document.getElementById('tb-users').innerHTML=d.data.users.map(u=>`<tr><td>${u.id}</td><td>${u.username}</td><td>${u.email}</td><td>${u.balance.toFixed(0)} ج.م</td></tr>`).join('');
-            const tl={recharge:'شحن',card_purchase:'كارت',deposit:'إيداع'};
-            document.getElementById('tb-tx').innerHTML=d.data.recent_transactions.map(t=>`<tr><td>${t.username}</td><td>${tl[t.type]||t.type}</td><td>${t.operator||'-'}</td><td>${t.amount} ج.م</td><td>${new Date(t.created_at).toLocaleDateString('ar-EG')}</td></tr>`).join('');
+
+            // Users table
+            document.getElementById('tb-users').innerHTML=d.data.users.map(u=>`
+                <tr>
+                    <td>${u.id}</td>
+                    <td>${u.username}</td>
+                    <td style="direction:ltr;text-align:right">${u.email}</td>
+                    <td>${u.balance.toFixed(2)} ج.م</td>
+                    <td>${u.created_at ? new Date(u.created_at).toLocaleDateString('ar-EG') : '-'}</td>
+                    <td><button class="btn btn-outline btn-xs" onclick="viewUserTx(${u.id},'${u.username}')">العمليات</button></td>
+                </tr>`).join('');
+
+            // Transactions table
+            const tl={recharge:'📱 شحن',card_purchase:'💳 كارت',deposit:'💰 إيداع'};
+            const sl={completed:'✅',pending:'⏳',failed:'❌'};
+            document.getElementById('tb-tx').innerHTML=d.data.recent_transactions.map(t=>`
+                <tr>
+                    <td>${t.id}</td>
+                    <td>${t.username}</td>
+                    <td>${tl[t.type]||t.type}</td>
+                    <td>${t.operator||'-'}</td>
+                    <td>${t.amount} ج.م</td>
+                    <td style="direction:ltr;text-align:right">${t.phone_number||'-'}</td>
+                    <td>${sl[t.status]||t.status}</td>
+                    <td>${t.created_at ? new Date(t.created_at).toLocaleDateString('ar-EG') : '-'}</td>
+                </tr>`).join('');
+
+            // Cards inventory
+            renderInventory(d.data.cards_inventory || []);
+        }
+
+        function renderInventory(inventory) {
+            const names={vodafone:'فودافون',etisalat:'اتصالات',orange:'اورنج',we:'وي'};
+            const operators=['vodafone','etisalat','orange','we'];
+            let html = '';
+            operators.forEach(op => {
+                const opCards = inventory.filter(c => c.operator === op);
+                if (opCards.length === 0) return;
+                html += `<div class="inv-card">
+                    <h4><span class="op-dot" style="width:10px;height:10px;border-radius:50%;background:var(--${op});display:inline-block"></span>${names[op]}</h4>`;
+                opCards.forEach(c => {
+                    html += `<div class="inv-row"><span>فئة ${c.denomination} ج.م</span><span style="color:var(--success)">${c.available} متاح</span><span style="color:var(--text-muted)">${c.sold} مباع</span></div>`;
+                });
+                html += `</div>`;
+            });
+            document.getElementById('inv-grid').innerHTML = html || '<p class="empty-state">لا توجد بيانات</p>';
+        }
+
+        async function viewUserTx(uid, username) {
+            document.getElementById('modal-title').textContent = `عمليات: ${username}`;
+            document.getElementById('modal-body').innerHTML = '<p class="empty-state">جاري التحميل...</p>';
+            document.getElementById('user-tx-modal').classList.add('active');
+            try {
+                const res = await fetch(`${API}/admin/user/${uid}/transactions`);
+                const d = await res.json();
+                if (d.success && d.data.length > 0) {
+                    const tl={recharge:'📱 شحن',card_purchase:'💳 كارت',deposit:'💰 إيداع'};
+                    document.getElementById('modal-body').innerHTML = `
+                        <table class="admin-table">
+                            <thead><tr><th>النوع</th><th>الشبكة</th><th>المبلغ</th><th>الرقم</th><th>الحالة</th><th>التاريخ</th></tr></thead>
+                            <tbody>${d.data.map(t=>`
+                                <tr>
+                                    <td>${tl[t.type]||t.type}</td>
+                                    <td>${t.operator||'-'}</td>
+                                    <td>${t.amount} ج.م</td>
+                                    <td style="direction:ltr;text-align:right">${t.phone_number||'-'}</td>
+                                    <td>${t.status}</td>
+                                    <td>${t.created_at ? new Date(t.created_at).toLocaleDateString('ar-EG') : '-'}</td>
+                                </tr>`).join('')}</tbody>
+                        </table>`;
+                } else {
+                    document.getElementById('modal-body').innerHTML = '<p class="empty-state">لا توجد عمليات لهذا المستخدم</p>';
+                }
+            } catch(e) {
+                document.getElementById('modal-body').innerHTML = '<p class="empty-state" style="color:var(--error)">خطأ في التحميل</p>';
+            }
+        }
+
+        function closeModal(e) {
+            if (e.target.classList.contains('modal-overlay')) {
+                e.target.classList.remove('active');
+            }
         }
 
         async function addBal(){
-            const uid=document.getElementById('bal-uid').value,amt=document.getElementById('bal-amt').value;
-            if(!uid||!amt){alert('أدخل البيانات');return;}
+            const uid=document.getElementById('bal-uid').value;
+            const amt=document.getElementById('bal-amt').value;
+            if(!uid||!amt){alert('أدخل رقم المستخدم والمبلغ');return;}
             const res=await fetch(`${API}/admin/add-balance`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user_id:+uid,amount:+amt})});
             const d=await res.json();
-            alert(d.success?d.message:d.error);
-            if(d.success)load();
+            const el=document.getElementById('bal-result');
+            el.style.display='block';
+            if(d.success){
+                el.style.color='var(--success)';
+                el.textContent=`✅ ${d.message} - الرصيد الجديد: ${d.data.new_balance} ج.م`;
+                load();
+            } else {
+                el.style.color='var(--error)';
+                el.textContent=`❌ ${d.error}`;
+            }
         }
     </script>
 </body>

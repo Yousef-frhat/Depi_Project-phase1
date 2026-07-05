@@ -105,7 +105,6 @@ def query_db(sql, params=None, fetchone=False, commit=False):
             cur.execute(sql, params)
             if commit:
                 conn.commit()
-                # Return lastrowid-equivalent for INSERT ... RETURNING
                 try:
                     return cur.fetchone() if fetchone else cur.fetchall()
                 except psycopg2.ProgrammingError:
@@ -119,9 +118,8 @@ def query_db(sql, params=None, fetchone=False, commit=False):
         conn.close()
 
 # ---------------------------------------------------------------------------
-# Supported Operators
+# Supported Operators & Recharge Amounts
 # ---------------------------------------------------------------------------
-
 
 OPERATORS = [
     {"id": "vodafone", "name": "Vodafone", "prefix": ["010"]},
@@ -130,7 +128,23 @@ OPERATORS = [
     {"id": "we", "name": "WE", "prefix": ["015"]},
 ]
 
-RECHARGE_AMOUNTS = [5, 10, 15, 20, 25, 50, 100, 200]
+RECHARGE_AMOUNTS = [
+    {"price": 10, "credit": 7},
+    {"price": 20, "credit": 14},
+    {"price": 30, "credit": 21},
+    {"price": 50, "credit": 35},
+    {"price": 100, "credit": 70},
+    {"price": 150, "credit": 105},
+    {"price": 200, "credit": 140},
+    {"price": 500, "credit": 350},
+]
+
+# Price mapping for cards (credit/denomination -> price user pays)
+# Formula: price = credit / 0.7 (rounded)
+CARD_PRICE_MAP = {
+    7: 10, 14: 20, 21: 30, 35: 50,
+    70: 100, 105: 150, 140: 200, 350: 500,
+}
 
 # ---------------------------------------------------------------------------
 # Error Handlers
@@ -167,7 +181,6 @@ def invalid_token_callback(error):
 def missing_token_callback(error):
     return jsonify({"success": False, "error": "Authorization token required"}), 401
 
-
 # ===========================================================================
 # AUTH SERVICE
 # ===========================================================================
@@ -198,7 +211,6 @@ def register():
         return jsonify({"success": False, "error": "Invalid email format"}), 400
 
     try:
-        # Check if user already exists
         existing = query_db(
             "SELECT id FROM users WHERE username = %s OR email = %s",
             (username, email),
@@ -207,13 +219,12 @@ def register():
         if existing:
             return jsonify({"success": False, "error": "Username or email already registered"}), 409
 
-        # Create user with initial balance for demo
         password_hash = generate_password_hash(password)
         user = query_db(
             """INSERT INTO users (username, email, password_hash, balance)
                VALUES (%s, %s, %s, %s)
                RETURNING id, username, email, balance, created_at""",
-            (username, email, password_hash, 1000.0),
+            (username, email, password_hash, 0.0),
             fetchone=True,
             commit=True,
         )
@@ -314,7 +325,6 @@ def profile():
         logger.error(f"Profile error: {e}")
         return jsonify({"success": False, "error": "Failed to fetch profile"}), 500
 
-
 # ===========================================================================
 # RECHARGE SERVICE
 # ===========================================================================
@@ -322,7 +332,7 @@ def profile():
 
 @app.route("/api/recharge/operators", methods=["GET"])
 def get_operators():
-    """List supported mobile operators."""
+    """List supported mobile operators and recharge amounts."""
     return jsonify({
         "success": True,
         "data": {
@@ -344,7 +354,7 @@ def recharge():
 
     phone_number = data.get("phone_number", "").strip()
     operator = data.get("operator", "").strip().lower()
-    amount = data.get("amount")
+    amount = data.get("amount")  # This is the credit value
 
     # Validation
     if not phone_number or not operator or not amount:
@@ -355,11 +365,22 @@ def recharge():
     except (ValueError, TypeError):
         return jsonify({"success": False, "error": "Invalid amount"}), 400
 
-    if amount not in RECHARGE_AMOUNTS:
+    # Find matching recharge entry by credit value
+    recharge_entry = None
+    for entry in RECHARGE_AMOUNTS:
+        if entry["credit"] == amount:
+            recharge_entry = entry
+            break
+
+    if not recharge_entry:
+        valid_credits = [e["credit"] for e in RECHARGE_AMOUNTS]
         return jsonify({
             "success": False,
-            "error": f"Invalid amount. Allowed values: {RECHARGE_AMOUNTS}",
+            "error": f"Invalid credit amount. Allowed values: {valid_credits}",
         }), 400
+
+    price = recharge_entry["price"]
+    credit = recharge_entry["credit"]
 
     # Validate operator
     valid_operators = [op["id"] for op in OPERATORS]
@@ -385,7 +406,7 @@ def recharge():
         }), 400
 
     try:
-        # Check user balance
+        # Check user balance - deduct price (not credit)
         user = query_db(
             "SELECT id, balance FROM users WHERE id = %s",
             (user_id,),
@@ -395,36 +416,36 @@ def recharge():
         if not user:
             return jsonify({"success": False, "error": "User not found"}), 404
 
-        if float(user["balance"]) < amount:
+        if float(user["balance"]) < price:
             return jsonify({"success": False, "error": "Insufficient balance"}), 400
 
-        # Deduct balance and create transaction
+        # Deduct price from balance and record credit in transaction
         conn = get_db()
         try:
             with conn.cursor() as cur:
-                # Deduct from balance
+                # Deduct price from balance
                 cur.execute(
                     "UPDATE users SET balance = balance - %s WHERE id = %s AND balance >= %s",
-                    (amount, user_id, amount),
+                    (price, user_id, price),
                 )
                 if cur.rowcount == 0:
                     conn.rollback()
                     return jsonify({"success": False, "error": "Insufficient balance"}), 400
 
-                # Record transaction
+                # Record transaction with credit amount
                 cur.execute(
                     """INSERT INTO transactions (user_id, type, operator, amount, phone_number, status)
                        VALUES (%s, %s, %s, %s, %s, %s)
                        RETURNING id, type, operator, amount, phone_number, status, created_at""",
-                    (user_id, "recharge", operator, amount, phone_number, "completed"),
+                    (user_id, "recharge", operator, credit, phone_number, "completed"),
                 )
                 transaction = cur.fetchone()
                 conn.commit()
 
-            logger.info(f"Recharge successful: user={user_id}, operator={operator}, amount={amount}")
+            logger.info(f"Recharge successful: user={user_id}, operator={operator}, credit={credit}, price={price}")
             return jsonify({
                 "success": True,
-                "message": f"Successfully recharged {phone_number} with {amount} EGP",
+                "message": f"Successfully recharged {phone_number} with {credit} EGP",
                 "data": {
                     "transaction_id": transaction["id"],
                     "type": transaction["type"],
@@ -446,7 +467,6 @@ def recharge():
         logger.error(f"Recharge error: {e}")
         return jsonify({"success": False, "error": "Recharge failed"}), 500
 
-
 # ===========================================================================
 # CARDS SERVICE
 # ===========================================================================
@@ -454,13 +474,13 @@ def recharge():
 
 @app.route("/api/cards/available", methods=["GET"])
 def available_cards():
-    """List available scratch cards grouped by operator and denomination."""
+    """List available scratch cards grouped by operator and denomination with price."""
     try:
         cards = query_db(
-            """SELECT operator, denomination, COUNT(*) as available_count
+            """SELECT operator, denomination, price, COUNT(*) as available_count
                FROM cards
                WHERE is_sold = FALSE
-               GROUP BY operator, denomination
+               GROUP BY operator, denomination, price
                ORDER BY operator, denomination""",
         )
 
@@ -470,6 +490,7 @@ def available_cards():
                 {
                     "operator": card["operator"],
                     "denomination": float(card["denomination"]),
+                    "price": float(card["price"]) if card.get("price") else CARD_PRICE_MAP.get(int(card["denomination"]), float(card["denomination"])),
                     "available_count": card["available_count"],
                 }
                 for card in cards
@@ -484,7 +505,7 @@ def available_cards():
 @app.route("/api/cards/purchase", methods=["POST"])
 @jwt_required()
 def purchase_card():
-    """Purchase a scratch card."""
+    """Purchase a scratch card. Deducts price (not denomination) from balance."""
     user_id = get_jwt_identity()
     data = request.get_json()
 
@@ -507,11 +528,16 @@ def purchase_card():
     if operator not in valid_operators:
         return jsonify({"success": False, "error": f"Invalid operator. Choose from: {valid_operators}"}), 400
 
+    # Get the price for this denomination
+    price = CARD_PRICE_MAP.get(int(denomination))
+    if not price:
+        return jsonify({"success": False, "error": "Invalid denomination"}), 400
+
     try:
         conn = get_db()
         try:
             with conn.cursor() as cur:
-                # Check user balance
+                # Check user balance against price
                 cur.execute("SELECT balance FROM users WHERE id = %s FOR UPDATE", (user_id,))
                 user = cur.fetchone()
 
@@ -519,7 +545,7 @@ def purchase_card():
                     conn.rollback()
                     return jsonify({"success": False, "error": "User not found"}), 404
 
-                if float(user["balance"]) < denomination:
+                if float(user["balance"]) < price:
                     conn.rollback()
                     return jsonify({"success": False, "error": "Insufficient balance"}), 400
 
@@ -545,13 +571,13 @@ def purchase_card():
                     (user_id, card["id"]),
                 )
 
-                # Deduct balance
+                # Deduct price from balance (not denomination)
                 cur.execute(
                     "UPDATE users SET balance = balance - %s WHERE id = %s",
-                    (denomination, user_id),
+                    (price, user_id),
                 )
 
-                # Record transaction
+                # Record transaction with denomination amount
                 cur.execute(
                     """INSERT INTO transactions (user_id, type, operator, amount, phone_number, status)
                        VALUES (%s, %s, %s, %s, %s, %s)
@@ -561,7 +587,7 @@ def purchase_card():
                 transaction = cur.fetchone()
                 conn.commit()
 
-            logger.info(f"Card purchased: user={user_id}, operator={operator}, denomination={denomination}")
+            logger.info(f"Card purchased: user={user_id}, operator={operator}, denomination={denomination}, price={price}")
             return jsonify({
                 "success": True,
                 "message": "Card purchased successfully",
@@ -586,7 +612,6 @@ def purchase_card():
         logger.error(f"Card purchase error: {e}")
         return jsonify({"success": False, "error": "Card purchase failed"}), 500
 
-
 # ===========================================================================
 # TRANSACTIONS SERVICE
 # ===========================================================================
@@ -604,7 +629,6 @@ def transactions():
     offset = (page - 1) * per_page
 
     try:
-        # Get total count
         count_result = query_db(
             "SELECT COUNT(*) as total FROM transactions WHERE user_id = %s",
             (user_id,),
@@ -612,7 +636,6 @@ def transactions():
         )
         total = count_result["total"] if count_result else 0
 
-        # Get transactions
         rows = query_db(
             """SELECT id, type, operator, amount, phone_number, status, created_at
                FROM transactions
@@ -650,7 +673,6 @@ def transactions():
         logger.error(f"Transactions error: {e}")
         return jsonify({"success": False, "error": "Failed to fetch transactions"}), 500
 
-
 # ===========================================================================
 # ADMIN ENDPOINTS
 # ===========================================================================
@@ -672,14 +694,24 @@ def admin_stats():
 
         recent_transactions = query_db(
             """SELECT t.id, t.type, t.operator, t.amount, t.phone_number, t.status, t.created_at,
-                      u.username
+                      u.username, u.id as user_id
                FROM transactions t
                JOIN users u ON t.user_id = u.id
-               ORDER BY t.created_at DESC LIMIT 20"""
+               ORDER BY t.created_at DESC LIMIT 50"""
         )
 
         users = query_db(
-            "SELECT id, username, email, balance, created_at FROM users ORDER BY created_at DESC LIMIT 50"
+            "SELECT id, username, email, balance, created_at FROM users ORDER BY created_at DESC"
+        )
+
+        # Cards inventory per operator
+        cards_inventory = query_db(
+            """SELECT operator, denomination,
+                      COUNT(*) FILTER (WHERE is_sold = FALSE) as available,
+                      COUNT(*) FILTER (WHERE is_sold = TRUE) as sold
+               FROM cards
+               GROUP BY operator, denomination
+               ORDER BY operator, denomination"""
         )
 
         return jsonify({
@@ -695,6 +727,7 @@ def admin_stats():
                 "recent_transactions": [
                     {
                         "id": t["id"],
+                        "user_id": t["user_id"],
                         "username": t["username"],
                         "type": t["type"],
                         "operator": t["operator"],
@@ -715,12 +748,53 @@ def admin_stats():
                     }
                     for u in users
                 ],
+                "cards_inventory": [
+                    {
+                        "operator": ci["operator"],
+                        "denomination": float(ci["denomination"]),
+                        "available": ci["available"],
+                        "sold": ci["sold"],
+                    }
+                    for ci in cards_inventory
+                ],
             },
         }), 200
 
     except Exception as e:
         logger.error(f"Admin stats error: {e}")
         return jsonify({"success": False, "error": "Failed to fetch admin stats"}), 500
+
+
+@app.route("/api/admin/user/<int:uid>/transactions", methods=["GET"])
+def admin_user_transactions(uid):
+    """Get transaction history for a specific user (admin)."""
+    try:
+        rows = query_db(
+            """SELECT id, type, operator, amount, phone_number, status, created_at
+               FROM transactions
+               WHERE user_id = %s
+               ORDER BY created_at DESC
+               LIMIT 100""",
+            (uid,),
+        )
+        return jsonify({
+            "success": True,
+            "data": [
+                {
+                    "id": row["id"],
+                    "type": row["type"],
+                    "operator": row["operator"],
+                    "amount": float(row["amount"]),
+                    "phone_number": row["phone_number"],
+                    "status": row["status"],
+                    "created_at": row["created_at"].isoformat() if row["created_at"] else None,
+                }
+                for row in rows
+            ],
+        }), 200
+    except Exception as e:
+        logger.error(f"Admin user transactions error: {e}")
+        return jsonify({"success": False, "error": "Failed to fetch user transactions"}), 500
 
 
 @app.route("/api/admin/add-balance", methods=["POST"])
@@ -768,7 +842,6 @@ def admin_add_balance():
     except Exception as e:
         logger.error(f"Add balance error: {e}")
         return jsonify({"success": False, "error": "Failed to add balance"}), 500
-
 
 # ===========================================================================
 # HEALTH CHECK

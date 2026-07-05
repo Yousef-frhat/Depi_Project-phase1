@@ -69,7 +69,10 @@ services:
     build: ./frontend
     container_name: chargehub-frontend
     ports:
-      - "8080:80"
+      - "8080:8080"
+    volumes:
+      - ./frontend/nginx-local.conf:/etc/nginx/conf.d/default.conf
+    entrypoint: ["nginx", "-g", "daemon off;"]
     depends_on:
       - backend
     restart: unless-stopped
