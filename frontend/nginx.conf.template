@@ -1,0 +1,41 @@
+server {
+    listen 8080;
+    server_name _;
+    root /usr/share/nginx/html;
+    index index.html;
+
+    # Gzip compression
+    gzip on;
+    gzip_types text/plain text/css application/json application/javascript text/xml;
+    gzip_min_length 1000;
+
+    # API proxy to backend
+    location /api/ {
+        proxy_pass https://${BACKEND_HOST}/api/;
+        proxy_ssl_server_name on;
+        proxy_set_header Host ${BACKEND_HOST};
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_connect_timeout 30s;
+        proxy_read_timeout 30s;
+    }
+
+    # Metrics proxy
+    location /metrics {
+        proxy_pass https://${BACKEND_HOST}/metrics;
+        proxy_ssl_server_name on;
+        proxy_set_header Host ${BACKEND_HOST};
+    }
+
+    # Frontend static files
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # Cache static assets
+    location ~* \.(css|js|png|jpg|jpeg|gif|ico|svg|woff|woff2)$ {
+        expires 7d;
+        add_header Cache-Control "public, immutable";
+    }
+}
