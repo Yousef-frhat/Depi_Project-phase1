@@ -45,6 +45,7 @@
         <div class="container nav-content">
             <div class="logo"><img src="/logo.png" alt="ChargeHub" style="width:32px;height:32px;border-radius:8px;"><span class="logo-text">Admin Panel</span></div>
             <div style="display:flex;gap:10px;">
+                <a href="monitoring.html" class="btn btn-outline btn-sm">📊 المراقبة</a>
                 <a href="dashboard.html" class="btn btn-outline btn-sm">← الداشبورد</a>
                 <button class="btn btn-outline btn-sm" onclick="localStorage.clear();location.href='login.html'">خروج</button>
             </div>
@@ -66,6 +67,7 @@
         <div class="admin-tabs">
             <div class="admin-tab active" onclick="showAdminTab('users')">المستخدمين</div>
             <div class="admin-tab" onclick="showAdminTab('transactions')">العمليات</div>
+            <div class="admin-tab" onclick="showAdminTab('deposits')">طلبات الشحن</div>
             <div class="admin-tab" onclick="showAdminTab('balance')">إضافة رصيد</div>
             <div class="admin-tab" onclick="showAdminTab('inventory')">مخزون الكروت</div>
         </div>
@@ -91,6 +93,19 @@
                     <table class="admin-table">
                         <thead><tr><th>ID</th><th>المستخدم</th><th>النوع</th><th>الشبكة</th><th>المبلغ</th><th>الرقم</th><th>الحالة</th><th>التاريخ</th></tr></thead>
                         <tbody id="tb-tx"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Deposits Tab -->
+        <div class="tab-content" id="tab-deposits">
+            <div class="admin-section">
+                <h2>طلبات شحن الرصيد (إثبات تحويل)</h2>
+                <div style="overflow-x:auto;">
+                    <table class="admin-table">
+                        <thead><tr><th>ID</th><th>المستخدم</th><th>المبلغ المدفوع</th><th>الرصيد المضاف</th><th>طريقة الدفع</th><th>إثبات التحويل</th><th>الحالة</th><th>التاريخ</th><th>إجراءات</th></tr></thead>
+                        <tbody id="tb-deposits"></tbody>
                     </table>
                 </div>
             </div>
@@ -141,6 +156,7 @@
             document.querySelectorAll('.admin-tab').forEach(el => el.classList.remove('active'));
             document.getElementById('tab-'+tab).classList.add('active');
             event.target.classList.add('active');
+            if (tab === 'deposits') loadDeposits();
         }
 
         async function load(){
@@ -253,6 +269,63 @@
                 el.style.color='var(--error)';
                 el.textContent=`❌ ${d.error}`;
             }
+        }
+
+        // Deposit Requests Management
+        async function loadDeposits() {
+            try {
+                const res = await fetch(`${API}/admin/deposit-requests`);
+                const d = await res.json();
+                if (!d.success) return;
+
+                const statusMap = {pending: '⏳ معلق', approved: '✅ مقبول', rejected: '❌ مرفوض'};
+                document.getElementById('tb-deposits').innerHTML = d.data.map(r => `
+                    <tr>
+                        <td>${r.id}</td>
+                        <td>${r.username}</td>
+                        <td>${r.amount} ج.م</td>
+                        <td>${r.credit_amount} ج.م</td>
+                        <td>${r.payment_method || '-'}</td>
+                        <td>${r.proof_filename ? `<a href="${API}/uploads/${r.proof_filename}" target="_blank"><img src="${API}/uploads/${r.proof_filename}" style="width:50px;height:50px;object-fit:cover;border-radius:6px;border:1px solid var(--border);cursor:pointer" alt="proof"></a>` : '-'}</td>
+                        <td>${statusMap[r.status] || r.status}</td>
+                        <td>${r.created_at ? new Date(r.created_at).toLocaleDateString('ar-EG') : '-'}</td>
+                        <td>${r.status === 'pending' ? `
+                            <button class="btn btn-sm" style="background:var(--success);color:#fff;padding:4px 10px;font-size:0.75rem;border-radius:8px;margin-left:4px" onclick="approveDeposit(${r.id})">قبول</button>
+                            <button class="btn btn-sm" style="background:var(--error);color:#fff;padding:4px 10px;font-size:0.75rem;border-radius:8px" onclick="rejectDeposit(${r.id})">رفض</button>
+                        ` : '-'}</td>
+                    </tr>`).join('') || '<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--text-secondary)">لا توجد طلبات</td></tr>';
+            } catch(e) {
+                console.error('Load deposits error:', e);
+            }
+        }
+
+        async function approveDeposit(id) {
+            if (!confirm('هل تريد قبول هذا الطلب وإضافة الرصيد؟')) return;
+            try {
+                const res = await fetch(`${API}/admin/deposit-requests/${id}/approve`, { method: 'POST' });
+                const d = await res.json();
+                if (d.success) {
+                    alert('✅ ' + d.message);
+                    loadDeposits();
+                    load();
+                } else {
+                    alert('❌ ' + d.error);
+                }
+            } catch(e) { alert('خطأ في الاتصال'); }
+        }
+
+        async function rejectDeposit(id) {
+            if (!confirm('هل تريد رفض هذا الطلب؟')) return;
+            try {
+                const res = await fetch(`${API}/admin/deposit-requests/${id}/reject`, { method: 'POST' });
+                const d = await res.json();
+                if (d.success) {
+                    alert('تم رفض الطلب');
+                    loadDeposits();
+                } else {
+                    alert('❌ ' + d.error);
+                }
+            } catch(e) { alert('خطأ في الاتصال'); }
         }
     </script>
 </body>

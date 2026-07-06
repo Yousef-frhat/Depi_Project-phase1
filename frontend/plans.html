@@ -273,9 +273,34 @@
                 </div>
             </div>
 
+            <!-- Transfer Proof Upload -->
+            <div class="summary-card" style="margin-top:20px;" id="transfer-section">
+                <h3 style="text-align:center;margin-bottom:16px;font-size:1rem;">📱 حوّل على الرقم ده</h3>
+                <div style="text-align:center;background:var(--bg-secondary);padding:16px;border-radius:var(--radius);margin-bottom:16px;">
+                    <span style="font-size:1.5rem;font-weight:800;letter-spacing:2px;color:var(--primary);">01017303753</span>
+                    <p style="color:var(--text-secondary);font-size:0.8rem;margin-top:6px;">فودافون كاش / انستاباي</p>
+                </div>
+                <label style="display:block;text-align:center;margin-bottom:12px;color:var(--text-secondary);font-size:0.9rem;">ارفع صورة إثبات التحويل</label>
+                <div style="text-align:center;">
+                    <input type="file" id="transfer-proof" accept="image/*" style="display:none;" onchange="onProofUploaded()">
+                    <button class="btn btn-outline" onclick="document.getElementById('transfer-proof').click()" id="upload-btn">📷 اختر صورة التحويل</button>
+                    <p id="upload-status" style="margin-top:10px;font-size:0.85rem;color:var(--text-secondary);display:none;"></p>
+                </div>
+            </div>
+
+            <!-- Success message (hidden by default) -->
+            <div id="proof-success" style="display:none;text-align:center;margin-top:20px;">
+                <div class="summary-card" style="border-color:var(--secondary);background:rgba(0,212,170,0.05);">
+                    <div style="font-size:2.5rem;margin-bottom:12px;">✅</div>
+                    <h3 style="margin-bottom:8px;color:var(--secondary);">تم رفع الإثبات بنجاح</h3>
+                    <p style="color:var(--text-secondary);font-size:0.9rem;line-height:1.8;">جاري التحقق من الأدمن خلال 24 ساعة.<br>هيتم إضافة الرصيد لحسابك بعد التأكيد.</p>
+                </div>
+            </div>
+
             <div class="step-actions">
                 <button class="btn btn-outline" onclick="goStep(2)">→ رجوع</button>
-                <button class="btn btn-primary btn-lg" onclick="confirmAndGo()">🚀 ابدأ الآن</button>
+                <button class="btn btn-primary btn-lg" onclick="confirmAndGo()" id="confirm-btn">🚀 ابدأ الآن</button>
+                <button class="btn btn-outline btn-lg" onclick="skipToDashboard()" id="skip-btn" style="display:none;">تخطي ←</button>
             </div>
         </div>
     </div>
@@ -287,6 +312,9 @@
 
         // Guard: must be logged in
         if (!token) { window.location.href = 'login.html'; }
+
+        // Admin goes directly to admin panel
+        if (user.email === 'admin@chargehub.com') { window.location.href = 'admin.html'; }
 
         // If user already went through plans (has flag), go to dashboard
         if (localStorage.getItem('plan_selected')) { window.location.href = 'dashboard.html'; }
@@ -368,29 +396,55 @@
             }
         }
 
+        function onProofUploaded() {
+            const file = document.getElementById('transfer-proof').files[0];
+            if (file) {
+                document.getElementById('upload-btn').textContent = '✅ ' + file.name;
+                document.getElementById('upload-btn').style.borderColor = 'var(--secondary)';
+                document.getElementById('upload-btn').style.color = 'var(--secondary)';
+                document.getElementById('upload-status').style.display = 'block';
+                document.getElementById('upload-status').textContent = 'تم اختيار الصورة بنجاح';
+                document.getElementById('upload-status').style.color = 'var(--secondary)';
+            }
+        }
+
         async function confirmAndGo() {
-            // Simulate adding balance via admin endpoint (for demo purposes the balance is already 1000)
-            // In production this would trigger a real payment gateway
-            // For now, save plan selection and proceed
+            const file = document.getElementById('transfer-proof').files[0];
+            if (!file) {
+                alert('ارفع صورة إثبات التحويل الأول');
+                return;
+            }
+
+            // Save plan selection
             localStorage.setItem('plan_selected', selectedPlan);
             localStorage.setItem('plan_payment', selectedPayment);
+            localStorage.setItem('balance_pending', 'true');
+            localStorage.setItem('pending_amount', Math.round(selectedAmount * 0.7));
 
-            // Add balance via API (demo: admin adds credit amount = 70% of payment)
-            const creditToAdd = Math.round(selectedAmount * 0.7);
+            // Upload proof to server
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('amount', selectedAmount);
+            formData.append('credit_amount', Math.round(selectedAmount * 0.7));
+            formData.append('payment_method', selectedPayment);
+
             try {
-                const res = await fetch(`${API}/admin/add-balance`, {
+                const token = localStorage.getItem('token');
+                await fetch(`${API}/deposit-request`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ user_id: user.id, amount: creditToAdd })
+                    headers: { 'Authorization': `Bearer ${token}` },
+                    body: formData
                 });
-                const data = await res.json();
-                if (data.success) {
-                    // Update local balance
-                    user.balance = (user.balance || 0) + creditToAdd;
-                    localStorage.setItem('user', JSON.stringify(user));
-                }
-            } catch (e) { /* proceed anyway for demo */ }
+            } catch(e) { console.error(e); }
 
+            // Show success message and skip button
+            document.getElementById('transfer-section').style.display = 'none';
+            document.getElementById('proof-success').style.display = 'block';
+            document.getElementById('confirm-btn').style.display = 'none';
+            document.getElementById('skip-btn').style.display = 'inline-flex';
+        }
+
+        function skipToDashboard() {
             window.location.href = 'dashboard.html';
         }
 

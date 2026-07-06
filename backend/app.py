@@ -5,9 +5,10 @@ Main Flask application with microservices architecture.
 
 import os
 import logging
+import time
 from datetime import datetime, timezone
 
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from flask_jwt_extended import (
     JWTManager,
@@ -16,6 +17,7 @@ from flask_jwt_extended import (
     get_jwt_identity,
 )
 from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.utils import secure_filename
 from dotenv import load_dotenv
 
 import psycopg2
@@ -842,6 +844,221 @@ def admin_add_balance():
     except Exception as e:
         logger.error(f"Add balance error: {e}")
         return jsonify({"success": False, "error": "Failed to add balance"}), 500
+
+# ===========================================================================
+# DEPOSIT REQUESTS (Transfer Proof Upload)
+# ===========================================================================
+
+UPLOAD_FOLDER = '/app/uploads'
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
+
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+
+@app.route("/api/deposit-request", methods=["POST"])
+@jwt_required()
+def create_deposit_request():
+    """Upload transfer proof and create a deposit request."""
+    user_id = get_jwt_identity()
+
+    if 'file' not in request.files:
+        return jsonify({"success": False, "error": "No file uploaded"}), 400
+
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({"success": False, "error": "No file selected"}), 400
+
+    if not allowed_file(file.filename):
+        return jsonify({"success": False, "error": "File type not allowed. Use: png, jpg, jpeg, gif, webp"}), 400
+
+    amount = request.form.get('amount')
+    credit_amount = request.form.get('credit_amount')
+    payment_method = request.form.get('payment_method', '')
+
+    if not amount or not credit_amount:
+        return jsonify({"success": False, "error": "amount and credit_amount are required"}), 400
+
+    try:
+        amount = float(amount)
+        credit_amount = float(credit_amount)
+    except (ValueError, TypeError):
+        return jsonify({"success": False, "error": "Invalid amount values"}), 400
+
+    # Save file with unique name
+    timestamp = int(time.time())
+    filename = f"{user_id}_{timestamp}_{secure_filename(file.filename)}"
+    filepath = os.path.join(UPLOAD_FOLDER, filename)
+    file.save(filepath)
+
+    try:
+        result = query_db(
+            """INSERT INTO deposit_requests (user_id, amount, credit_amount, payment_method, proof_filename)
+               VALUES (%s, %s, %s, %s, %s)
+               RETURNING id, status, created_at""",
+            (user_id, amount, credit_amount, payment_method, filename),
+            fetchone=True,
+            commit=True,
+        )
+
+        logger.info(f"Deposit request created: user={user_id}, amount={amount}, file={filename}")
+        return jsonify({
+            "success": True,
+            "message": "Deposit request submitted successfully",
+            "data": {
+                "id": result["id"],
+                "status": result["status"],
+                "created_at": result["created_at"].isoformat() if result["created_at"] else None,
+            },
+        }), 201
+
+    except Exception as e:
+        logger.error(f"Deposit request error: {e}")
+        return jsonify({"success": False, "error": "Failed to create deposit request"}), 500
+
+
+@app.route("/api/admin/deposit-requests", methods=["GET"])
+def admin_deposit_requests():
+    """List all deposit requests with user info."""
+    try:
+        rows = query_db(
+            """SELECT dr.id, dr.user_id, dr.amount, dr.credit_amount, dr.payment_method,
+                      dr.proof_filename, dr.status, dr.created_at, dr.reviewed_at,
+                      u.username, u.email
+               FROM deposit_requests dr
+               JOIN users u ON dr.user_id = u.id
+               ORDER BY dr.created_at DESC"""
+        )
+
+        return jsonify({
+            "success": True,
+            "data": [
+                {
+                    "id": row["id"],
+                    "user_id": row["user_id"],
+                    "username": row["username"],
+                    "email": row["email"],
+                    "amount": float(row["amount"]),
+                    "credit_amount": float(row["credit_amount"]),
+                    "payment_method": row["payment_method"],
+                    "proof_filename": row["proof_filename"],
+                    "status": row["status"],
+                    "created_at": row["created_at"].isoformat() if row["created_at"] else None,
+                    "reviewed_at": row["reviewed_at"].isoformat() if row["reviewed_at"] else None,
+                }
+                for row in rows
+            ],
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Admin deposit requests error: {e}")
+        return jsonify({"success": False, "error": "Failed to fetch deposit requests"}), 500
+
+
+@app.route("/api/admin/deposit-requests/<int:req_id>/approve", methods=["POST"])
+def admin_approve_deposit(req_id):
+    """Approve a deposit request - add credit to user balance."""
+    try:
+        conn = get_db()
+        try:
+            with conn.cursor() as cur:
+                # Get the deposit request
+                cur.execute(
+                    "SELECT id, user_id, credit_amount, status FROM deposit_requests WHERE id = %s",
+                    (req_id,),
+                )
+                dep = cur.fetchone()
+
+                if not dep:
+                    conn.rollback()
+                    return jsonify({"success": False, "error": "Deposit request not found"}), 404
+
+                if dep["status"] != "pending":
+                    conn.rollback()
+                    return jsonify({"success": False, "error": "Request already processed"}), 400
+
+                credit = float(dep["credit_amount"])
+                uid = dep["user_id"]
+
+                # Update status to approved
+                cur.execute(
+                    "UPDATE deposit_requests SET status = 'approved', reviewed_at = NOW() WHERE id = %s",
+                    (req_id,),
+                )
+
+                # Add credit to user balance
+                cur.execute(
+                    "UPDATE users SET balance = balance + %s WHERE id = %s",
+                    (credit, uid),
+                )
+
+                # Record transaction
+                cur.execute(
+                    """INSERT INTO transactions (user_id, type, operator, amount, status)
+                       VALUES (%s, 'deposit', 'transfer', %s, 'completed')""",
+                    (uid, credit),
+                )
+
+                conn.commit()
+
+            logger.info(f"Deposit request {req_id} approved: user={uid}, credit={credit}")
+            return jsonify({
+                "success": True,
+                "message": f"Approved - added {credit} EGP to user balance",
+            }), 200
+
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+
+    except Exception as e:
+        logger.error(f"Approve deposit error: {e}")
+        return jsonify({"success": False, "error": "Failed to approve deposit request"}), 500
+
+
+@app.route("/api/admin/deposit-requests/<int:req_id>/reject", methods=["POST"])
+def admin_reject_deposit(req_id):
+    """Reject a deposit request."""
+    try:
+        result = query_db(
+            "SELECT id, status FROM deposit_requests WHERE id = %s",
+            (req_id,),
+            fetchone=True,
+        )
+
+        if not result:
+            return jsonify({"success": False, "error": "Deposit request not found"}), 404
+
+        if result["status"] != "pending":
+            return jsonify({"success": False, "error": "Request already processed"}), 400
+
+        query_db(
+            "UPDATE deposit_requests SET status = 'rejected', reviewed_at = NOW() WHERE id = %s",
+            (req_id,),
+            commit=True,
+        )
+
+        logger.info(f"Deposit request {req_id} rejected")
+        return jsonify({
+            "success": True,
+            "message": "Deposit request rejected",
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Reject deposit error: {e}")
+        return jsonify({"success": False, "error": "Failed to reject deposit request"}), 500
+
+
+@app.route("/api/uploads/<filename>", methods=["GET"])
+def serve_upload(filename):
+    """Serve uploaded proof images."""
+    return send_from_directory(UPLOAD_FOLDER, filename)
+
 
 # ===========================================================================
 # HEALTH CHECK

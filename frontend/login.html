@@ -63,7 +63,10 @@
     <script>
         const API = '/api';
         if (localStorage.getItem('token')) {
-            if (!localStorage.getItem('plan_selected')) {
+            const _u = JSON.parse(localStorage.getItem('user') || '{}');
+            if (_u.email === 'admin@chargehub.com') {
+                window.location.href = 'admin.html';
+            } else if (!localStorage.getItem('plan_selected')) {
                 window.location.href = 'plans.html';
             } else {
                 window.location.href = 'dashboard.html';
@@ -92,8 +95,10 @@
                 if (data.success) {
                     localStorage.setItem('token', data.data.access_token);
                     localStorage.setItem('user', JSON.stringify(data.data.user));
-                    // If plan not selected yet, go to plans page first
-                    if (!localStorage.getItem('plan_selected')) {
+                    // Admin goes directly to admin panel
+                    if (data.data.user.email === 'admin@chargehub.com') {
+                        window.location.href = 'admin.html';
+                    } else if (!localStorage.getItem('plan_selected')) {
                         window.location.href = 'plans.html';
                     } else {
                         window.location.href = 'dashboard.html';

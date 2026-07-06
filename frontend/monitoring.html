@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ChargeHub - Monitoring</title>
+    <link rel="icon" type="image/png" href="/logo.png">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        .monitor-container{max-width:1400px;margin:90px auto 40px;padding:0 20px}
+        .monitor-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:24px;margin-top:24px}
+        .chart-card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:24px;position:relative}
+        .chart-card h3{font-size:1rem;margin-bottom:16px;color:var(--text-secondary);font-weight:600}
+        .chart-card canvas{max-height:280px}
+        .kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:30px}
+        .kpi-card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:20px;text-align:center;position:relative;overflow:hidden}
+        .kpi-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--primary),var(--secondary))}
+        .kpi-card .kpi-value{font-size:2rem;font-weight:800;background:linear-gradient(135deg,var(--primary),var(--secondary));-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:4px}
+        .kpi-card .kpi-label{color:var(--text-secondary);font-size:0.85rem}
+        .kpi-card .kpi-change{font-size:0.75rem;margin-top:6px;padding:2px 8px;border-radius:10px;display:inline-block}
+        .kpi-change.up{background:rgba(0,212,170,0.1);color:var(--secondary)}
+        .kpi-change.down{background:rgba(255,71,87,0.1);color:var(--error)}
+        .full-width{grid-column:1/-1}
+        @media(max-width:768px){.monitor-grid{grid-template-columns:1fr}.kpi-grid{grid-template-columns:repeat(2,1fr)}}
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container nav-content">
+            <div class="logo"><img src="/logo.png" alt="ChargeHub" style="width:32px;height:32px;border-radius:8px;"><span class="logo-text">Monitoring</span></div>
+            <div style="display:flex;gap:10px;">
+                <a href="admin.html" class="btn btn-outline btn-sm">← لوحة التحكم</a>
+                <button class="btn btn-outline btn-sm" onclick="localStorage.clear();location.href='login.html'">خروج</button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="monitor-container" id="monitor-content">
+        <h1 style="margin-bottom:8px">📊 المراقبة والتحليلات</h1>
+        <p style="color:var(--text-secondary);margin-bottom:24px">نظرة شاملة على أداء المنصة في الوقت الفعلي</p>
+
+        <!-- KPIs -->
+        <div class="kpi-grid">
+            <div class="kpi-card">
+                <div class="kpi-value" id="kpi-users">-</div>
+                <div class="kpi-label">إجمالي المستخدمين</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-value" id="kpi-transactions">-</div>
+                <div class="kpi-label">إجمالي العمليات</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-value" id="kpi-revenue">-</div>
+                <div class="kpi-label">الإيرادات (ج.م)</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-value" id="kpi-cards-sold">-</div>
+                <div class="kpi-label">كروت مباعة</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-value" id="kpi-cards-available">-</div>
+                <div class="kpi-label">كروت متاحة</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-value" id="kpi-pending">-</div>
+                <div class="kpi-label">طلبات معلقة</div>
+            </div>
+        </div>
+
+        <!-- Charts -->
+        <div class="monitor-grid">
+            <div class="chart-card">
+                <h3>📱 العمليات حسب الشبكة</h3>
+                <canvas id="chart-operators"></canvas>
+            </div>
+            <div class="chart-card">
+                <h3>💰 الإيرادات حسب الشبكة</h3>
+                <canvas id="chart-revenue-op"></canvas>
+            </div>
+            <div class="chart-card">
+                <h3>📦 مخزون الكروت</h3>
+                <canvas id="chart-inventory"></canvas>
+            </div>
+            <div class="chart-card">
+                <h3>🔄 نوع العمليات</h3>
+                <canvas id="chart-types"></canvas>
+            </div>
+            <div class="chart-card full-width">
+                <h3>📈 آخر العمليات (حسب التاريخ)</h3>
+                <canvas id="chart-timeline"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API = '/api';
+        const u = JSON.parse(localStorage.getItem('user') || '{}');
+        if (!localStorage.getItem('token') || u.email !== 'admin@chargehub.com') {
+            document.getElementById('monitor-content').innerHTML = '<div class="card" style="text-align:center;padding:60px"><h2>⛔ غير مصرح</h2><p style="color:var(--text-secondary);margin:12px 0">سجل بحساب الأدمن</p><a href="login.html" class="btn btn-primary">تسجيل الدخول</a></div>';
+        } else { loadMonitoring(); }
+
+        const chartColors = {
+            vodafone: '#e60000',
+            etisalat: '#009639',
+            orange: '#ff6600',
+            we: '#7b2d8b'
+        };
+        const opNames = { vodafone: 'فودافون', etisalat: 'اتصالات', orange: 'اورنج', we: 'وي' };
+
+        Chart.defaults.color = '#a0a0b0';
+        Chart.defaults.borderColor = 'rgba(255,255,255,0.06)';
+        Chart.defaults.font.family = 'Cairo';
+
+        async function loadMonitoring() {
+            try {
+                const res = await fetch(`${API}/admin/stats`);
+                const d = await res.json();
+                if (!d.success) return;
+
+                const stats = d.data.stats;
+                const transactions = d.data.recent_transactions;
+                const inventory = d.data.cards_inventory;
+
+                // KPIs
+                document.getElementById('kpi-users').textContent = stats.total_users;
+                document.getElementById('kpi-transactions').textContent = stats.total_transactions;
+                document.getElementById('kpi-revenue').textContent = stats.total_revenue.toLocaleString('ar-EG');
+                document.getElementById('kpi-cards-sold').textContent = stats.cards_sold;
+                document.getElementById('kpi-cards-available').textContent = stats.cards_available;
+
+                // Pending deposits
+                try {
+                    const depRes = await fetch(`${API}/admin/deposit-requests`);
+                    const depData = await depRes.json();
+                    const pending = depData.success ? depData.data.filter(r => r.status === 'pending').length : 0;
+                    document.getElementById('kpi-pending').textContent = pending;
+                } catch(e) { document.getElementById('kpi-pending').textContent = '0'; }
+
+                // Chart 1: Transactions per operator
+                const opCount = { vodafone: 0, etisalat: 0, orange: 0, we: 0 };
+                transactions.forEach(t => { if (t.operator && opCount[t.operator] !== undefined) opCount[t.operator]++; });
+                new Chart(document.getElementById('chart-operators'), {
+                    type: 'doughnut',
+                    data: {
+                        labels: Object.keys(opCount).map(k => opNames[k]),
+                        datasets: [{
+                            data: Object.values(opCount),
+                            backgroundColor: Object.keys(opCount).map(k => chartColors[k]),
+                            borderWidth: 0
+                        }]
+                    },
+                    options: { responsive: true, plugins: { legend: { position: 'bottom' } } }
+                });
+
+                // Chart 2: Revenue per operator
+                const opRevenue = { vodafone: 0, etisalat: 0, orange: 0, we: 0 };
+                transactions.forEach(t => { if (t.operator && opRevenue[t.operator] !== undefined) opRevenue[t.operator] += t.amount; });
+                new Chart(document.getElementById('chart-revenue-op'), {
+                    type: 'bar',
+                    data: {
+                        labels: Object.keys(opRevenue).map(k => opNames[k]),
+                        datasets: [{
+                            label: 'الإيرادات (ج.م)',
+                            data: Object.values(opRevenue),
+                            backgroundColor: Object.keys(opRevenue).map(k => chartColors[k] + 'cc'),
+                            borderColor: Object.keys(opRevenue).map(k => chartColors[k]),
+                            borderWidth: 2,
+                            borderRadius: 8
+                        }]
+                    },
+                    options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+                });
+
+                // Chart 3: Inventory per operator
+                const operators = ['vodafone', 'etisalat', 'orange', 'we'];
+                const available = operators.map(op => inventory.filter(c => c.operator === op).reduce((s, c) => s + c.available, 0));
+                const sold = operators.map(op => inventory.filter(c => c.operator === op).reduce((s, c) => s + c.sold, 0));
+                new Chart(document.getElementById('chart-inventory'), {
+                    type: 'bar',
+                    data: {
+                        labels: operators.map(k => opNames[k]),
+                        datasets: [
+                            { label: 'متاح', data: available, backgroundColor: '#00d4aa99', borderColor: '#00d4aa', borderWidth: 2, borderRadius: 6 },
+                            { label: 'مباع', data: sold, backgroundColor: '#ff475799', borderColor: '#ff4757', borderWidth: 2, borderRadius: 6 }
+                        ]
+                    },
+                    options: { responsive: true, plugins: { legend: { position: 'bottom' } }, scales: { y: { beginAtZero: true } } }
+                });
+
+                // Chart 4: Transaction types
+                const typeCount = { recharge: 0, card_purchase: 0, deposit: 0 };
+                transactions.forEach(t => { if (typeCount[t.type] !== undefined) typeCount[t.type]++; });
+                const typeNames = { recharge: 'شحن رصيد', card_purchase: 'شراء كارت', deposit: 'إيداع' };
+                const typeColors = ['#6c63ff', '#00d4aa', '#ff9f43'];
+                new Chart(document.getElementById('chart-types'), {
+                    type: 'polarArea',
+                    data: {
+                        labels: Object.keys(typeCount).map(k => typeNames[k]),
+                        datasets: [{
+                            data: Object.values(typeCount),
+                            backgroundColor: typeColors.map(c => c + '99'),
+                            borderColor: typeColors,
+                            borderWidth: 2
+                        }]
+                    },
+                    options: { responsive: true, plugins: { legend: { position: 'bottom' } } }
+                });
+
+                // Chart 5: Timeline (last 7 days)
+                const dayMap = {};
+                const today = new Date();
+                for (let i = 6; i >= 0; i--) {
+                    const d2 = new Date(today);
+                    d2.setDate(d2.getDate() - i);
+                    const key = d2.toISOString().split('T')[0];
+                    dayMap[key] = 0;
+                }
+                transactions.forEach(t => {
+                    if (t.created_at) {
+                        const day = t.created_at.split('T')[0];
+                        if (dayMap[day] !== undefined) dayMap[day]++;
+                    }
+                });
+                new Chart(document.getElementById('chart-timeline'), {
+                    type: 'line',
+                    data: {
+                        labels: Object.keys(dayMap).map(d2 => new Date(d2).toLocaleDateString('ar-EG', { month: 'short', day: 'numeric' })),
+                        datasets: [{
+                            label: 'عدد العمليات',
+                            data: Object.values(dayMap),
+                            borderColor: '#6c63ff',
+                            backgroundColor: 'rgba(108,99,255,0.1)',
+                            fill: true,
+                            tension: 0.4,
+                            pointBackgroundColor: '#6c63ff',
+                            pointRadius: 5,
+                            pointHoverRadius: 8
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: { legend: { display: false } },
+                        scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }
+                    }
+                });
+
+            } catch (e) {
+                console.error('Monitoring load error:', e);
+            }
+        }
+    </script>
+</body>
+</html>

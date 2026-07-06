@@ -189,11 +189,19 @@
         }
 
         function updateUI() {
-            document.getElementById('user-balance').textContent = `${user.balance?.toFixed(2) || 0} ج.م`;
+            // Check if balance is pending review
+            if (localStorage.getItem('balance_pending') === 'true') {
+                const pendingAmt = localStorage.getItem('pending_amount') || '0';
+                document.getElementById('user-balance').textContent = `⏳ جاري المراجعة (${pendingAmt} ج.م)`;
+                document.getElementById('user-balance').style.background = 'linear-gradient(135deg, var(--warning), #ff8c00)';
+                document.getElementById('user-balance').style.fontSize = '0.7rem';
+            } else {
+                document.getElementById('user-balance').textContent = `${user.balance?.toFixed(2) || 0} ج.م`;
+            }
             document.getElementById('user-name').textContent = user.username || '';
             document.getElementById('p-name').textContent = user.username || '';
             document.getElementById('p-email').textContent = user.email || '';
-            document.getElementById('p-balance').textContent = user.balance?.toFixed(2) || '0';
+            document.getElementById('p-balance').textContent = localStorage.getItem('balance_pending') === 'true' ? 'جاري المراجعة' : (user.balance?.toFixed(2) || '0');
             document.getElementById('p-date').textContent = user.created_at ? new Date(user.created_at).toLocaleDateString('ar-EG') : '';
             // Show admin link if user is admin
             if (user.email === 'admin@chargehub.com') {

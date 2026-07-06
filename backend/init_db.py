@@ -86,12 +86,26 @@ CREATE TABLE IF NOT EXISTS cards (
     sold_at         TIMESTAMP
 );
 
+-- Deposit requests table (transfer proof uploads)
+CREATE TABLE IF NOT EXISTS deposit_requests (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    amount DECIMAL(10, 2) NOT NULL,
+    credit_amount DECIMAL(10, 2) NOT NULL,
+    payment_method VARCHAR(50),
+    proof_filename VARCHAR(255),
+    status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+    created_at TIMESTAMP DEFAULT NOW(),
+    reviewed_at TIMESTAMP
+);
+
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_transactions_user_id ON transactions(user_id);
 CREATE INDEX IF NOT EXISTS idx_transactions_created_at ON transactions(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_cards_operator_denomination ON cards(operator, denomination);
 CREATE INDEX IF NOT EXISTS idx_cards_is_sold ON cards(is_sold) WHERE is_sold = FALSE;
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+CREATE INDEX IF NOT EXISTS idx_deposit_requests_status ON deposit_requests(status);
 """
 
 
