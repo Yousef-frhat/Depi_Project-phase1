@@ -123,6 +123,7 @@ def query_db(sql, params=None, fetchone=False, commit=False):
 # Supported Operators & Recharge Amounts
 # ---------------------------------------------------------------------------
 
+
 OPERATORS = [
     {"id": "vodafone", "name": "Vodafone", "prefix": ["010"]},
     {"id": "etisalat", "name": "Etisalat", "prefix": ["011"]},
@@ -848,6 +849,7 @@ def admin_add_balance():
 # ===========================================================================
 # DEPOSIT REQUESTS (Transfer Proof Upload)
 # ===========================================================================
+
 
 UPLOAD_FOLDER = '/app/uploads'
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
